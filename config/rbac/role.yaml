@@ -1,0 +1,56 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - orchestration.cisco.com.cisco.com
+  resources:
+  - nsos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - orchestration.cisco.com.cisco.com
+  resources:
+  - nsos/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - orchestration.cisco.com.cisco.com
+  resources:
+  - nsos/status
+  verbs:
+  - get
+  - patch
+  - update

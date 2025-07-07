@@ -1,0 +1,18 @@
+apiVersion: orchestration.cisco.com.cisco.com/v1alpha1
+kind: NSO
+metadata:
+  labels:
+    app.kubernetes.io/name: nso-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: nso-sample
+spec:
+  image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
+  serviceName: "nso-prod"
+  replicas: 1
+  labelSelector:
+    app: "nso"
+  ports:
+    - name: "http"
+      port: 8080 
+    - name: "https"
+      port: 8888 
