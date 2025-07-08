@@ -19,8 +19,8 @@ package controller
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -71,13 +71,13 @@ func (r *NSOReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Objects to create - Service must be created first for StatefulSet
 
-	service := r.serviceForNSO(nso)
+	service := r.serviceForNSO(nso, ctx)
 	requeue, err := r.ensureObjectExists(ctx, service)
 	if err != nil || requeue {
 		return ctrl.Result{Requeue: requeue}, nil
 	}
 
-	statefulSet := r.statefulSetForNSO(nso)
+	statefulSet := r.statefulSetForNSO(nso, ctx)
 	requeue, err = r.ensureObjectExists(ctx, statefulSet)
 	if err != nil || requeue {
 		return ctrl.Result{Requeue: requeue}, nil
@@ -109,16 +109,17 @@ func (r *NSOReconciler) ensureObjectExists(ctx context.Context, obj client.Objec
 	return false, nil
 }
 
-func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO) *appsv1.StatefulSet {
+func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO, ctx context.Context) *appsv1.StatefulSet {
+	log := logf.FromContext(ctx)
 	statefulSetName := nso.Name
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: statefulSetName,
+			Name:      statefulSetName,
 			Namespace: nso.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: nso.Spec.ServiceName,
-			Replicas: &nso.Spec.Replicas,
+			Replicas:    &nso.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: nso.Spec.LabelSelector,
 			},
@@ -142,25 +143,34 @@ func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO
 			},
 		},
 	}
-	controllerutil.SetControllerReference(nso, statefulSet, r.Scheme)
+	err := controllerutil.SetControllerReference(nso, statefulSet, r.Scheme)
+	if err != nil {
+		log.Error(err, "Failed to set controller reference for StatefulSet")
+		return &appsv1.StatefulSet{}
+	}
 	return statefulSet
 }
 
-func (r *NSOReconciler) serviceForNSO(nso *orchestrationciscocomv1alpha1.NSO) *corev1.Service {
+func (r *NSOReconciler) serviceForNSO(nso *orchestrationciscocomv1alpha1.NSO, ctx context.Context) *corev1.Service {
+	log := logf.FromContext(ctx)
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: nso.Spec.ServiceName,
+			Name:      nso.Spec.ServiceName,
 			Namespace: nso.Namespace,
-			Labels: nso.Spec.LabelSelector,
+			Labels:    nso.Spec.LabelSelector,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeClusterIP,
-			Selector: nso.Spec.LabelSelector,
-			Ports: nso.Spec.Ports,
+			Type:      corev1.ServiceTypeClusterIP,
+			Selector:  nso.Spec.LabelSelector,
+			Ports:     nso.Spec.Ports,
 			ClusterIP: corev1.ClusterIPNone,
 		},
 	}
-	controllerutil.SetControllerReference(nso, service, r.Scheme)
+	err := controllerutil.SetControllerReference(nso, service, r.Scheme)
+	if err != nil {
+		log.Error(err, "Failed to set controller reference for Service")
+		return &corev1.Service{}
+	}
 	return service
 }
 

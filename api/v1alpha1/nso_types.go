@@ -31,23 +31,23 @@ type NSOSpec struct {
 
 	// +kubebuilder:validation:Required
 	// Container image name.
-	Image         string               `json:"image"`
+	Image string `json:"image"`
 
 	// +kubebuilder:validation:Required
 	// Name of the headless service for NSO.
-	ServiceName   string               `json:"serviceName"`
+	ServiceName string `json:"serviceName"`
 
 	// +kubebuilder:validation:Required
 	// Number of NSO replicas desired.
-	Replicas      int32                `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 
 	// +kubebuilder:validation:Required
 	// Labels for NSO resource.
-	LabelSelector map[string]string    `json:"labelSelector"`
+	LabelSelector map[string]string `json:"labelSelector"`
 
 	// +kubebuilder:validation:Required
 	// Service ports.
-	Ports         []corev1.ServicePort `json:"ports"`
+	Ports []corev1.ServicePort `json:"ports"`
 }
 
 // NSOStatus defines the observed state of NSO.
