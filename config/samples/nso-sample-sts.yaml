@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nso
+spec:
+  selector:
+    matchLabels:
+      app: nso-app
+  serviceName: nso-svc
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: nso-app
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - nso-app
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: nso-master
+        image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
+        env:
+        - name: ADMIN_USERNAME
+          value: "admin"
+        - name: ADMIN_PASSWORD
+          value: "admin"
+        - name: NSO_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: nso-credentials
+              key: credentials
+        volumeMounts:
+        - name: ncs-config
+          mountPath: /etc/ncs/ncs.conf
+          subPath: ncs.conf
+        ports:
+        - containerPort: 2024
+          name: ssh
+        - containerPort: 8080
+          name: http
+        - containerPort: 8888
+          name: https
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - |
+                curl -Isw "%{http_code}" http://localhost:8080/restconf \
+                  -H "Authorization: Basic $(NSO_CREDENTIALS)" | grep -q 200
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - |
+                curl -Isw "%{http_code}" http://localhost:8080/restconf \
+                  -H "Authorization: Basic $(NSO_CREDENTIALS)" | grep -q 200
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 3
+          failureThreshold: 3
+      volumes:
+      - name: ncs-config
+        configMap:
+          name: ncs-config
+          items:
+          - key: ncs.conf
+            path: ncs.conf
+            mode: 0600
