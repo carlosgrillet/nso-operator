@@ -31,7 +31,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "nso-operator-system"
+const namespace = "nso-system"
 
 // serviceAccountName created for the project
 const serviceAccountName = "nso-operator-controller-manager"

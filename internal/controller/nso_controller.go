@@ -44,6 +44,8 @@ type NSOReconciler struct {
 // +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=nsos/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -138,6 +140,20 @@ func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO
 							ContainerPort: 8888,
 							Name:          "https",
 						}},
+						Env: append([]corev1.EnvVar{{
+							Name:  "ADMIN_USERNAME",
+							Value: nso.Spec.AdminCredentials.Username,
+						}, {
+							Name: "ADMIN_PASSWORD",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: nso.Spec.AdminCredentials.PasswordSecretRef,
+									},
+									Key: "password",
+								},
+							},
+						}}, nso.Spec.Env...),
 					}},
 				},
 			},

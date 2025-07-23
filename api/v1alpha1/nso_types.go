@@ -48,6 +48,29 @@ type NSOSpec struct {
 	// +kubebuilder:validation:Required
 	// Service ports.
 	Ports []corev1.ServicePort `json:"ports"`
+
+	// +kubebuilder:validation:Required
+	// NSO configuration ConfigMap name.
+	NsoConfigRef string `json:"nsoConfigRef"`
+
+	// +kubebuilder:validation:Required
+	// NSO admin credentials.
+	AdminCredentials Credentials `json:"adminCredentials"`
+
+	// +kubebuilder:validation:Required
+	// NSO admin credentials.
+	Env []corev1.EnvVar `json:"env"`
+}
+
+// Credentials for admin user.
+type Credentials struct {
+	// +kubebuilder:validation:Required
+	// NSO admin username.
+	Username string `json:"username"`
+
+	// +kubebuilder:validation:Required
+	// NSO admin password Secret name.
+	PasswordSecretRef string `json:"passwordSecretRef"`
 }
 
 // NSOStatus defines the observed state of NSO.

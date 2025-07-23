@@ -16,3 +16,10 @@ spec:
       port: 8080 
     - name: "https"
       port: 8888 
+  adminCredentials:
+    username: admin
+    passwordSecretRef: nso-admin-password
+  nsoConfigRef: nso-config
+  env:
+    - name: MY_ENV
+      value: "container variable"
