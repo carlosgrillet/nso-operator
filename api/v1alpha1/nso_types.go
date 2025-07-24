@@ -57,9 +57,17 @@ type NSOSpec struct {
 	// NSO admin credentials.
 	AdminCredentials Credentials `json:"adminCredentials"`
 
-	// +kubebuilder:validation:Required
-	// NSO admin credentials.
+	// +kubebuilder:validation:Optional
+	// NSO environment variables.
 	Env []corev1.EnvVar `json:"env"`
+
+	// +kubebuilder:validation:Optional
+	// NSO volume mounts.
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts"`
+
+	// +kubebuilder:validation:Optional
+	// NSO volumes.
+	Volumes []corev1.Volume `json:"volumes"`
 }
 
 // Credentials for admin user.

@@ -114,6 +114,7 @@ func (r *NSOReconciler) ensureObjectExists(ctx context.Context, obj client.Objec
 func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO, ctx context.Context) *appsv1.StatefulSet {
 	log := logf.FromContext(ctx)
 	statefulSetName := nso.Name
+	ncsConfigFileMode := int32(0600)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      statefulSetName,
@@ -154,7 +155,27 @@ func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO
 								},
 							},
 						}}, nso.Spec.Env...),
+						VolumeMounts: append([]corev1.VolumeMount{{
+							Name:      "ncs-config",
+							MountPath: "/etc/ncs/ncs.conf",
+							SubPath:   "ncs.conf",
+						}}, nso.Spec.VolumeMounts...),
 					}},
+					Volumes: append([]corev1.Volume{{
+						Name: "ncs-config",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "ncs-config",
+								},
+								Items: []corev1.KeyToPath{{
+									Key:  "ncs.conf",
+									Path: "ncs.conf",
+									Mode: &ncsConfigFileMode,
+								}},
+							},
+						},
+					}}, nso.Spec.Volumes...),
 				},
 			},
 		},
