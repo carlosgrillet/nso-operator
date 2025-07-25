@@ -28,7 +28,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	orchestrationciscocomv1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
 )
@@ -211,12 +213,64 @@ func (r *NSOReconciler) serviceForNSO(nso *orchestrationciscocomv1alpha1.NSO, ct
 	return service
 }
 
+// Maps ConfigMap and Secrets changes to NSO reconcile requests
+func (r *NSOReconciler) watchForResourceChange(ctx context.Context, resource client.Object) []reconcile.Request {
+	log := logf.FromContext(ctx)
+	attachedNSOList := &orchestrationciscocomv1alpha1.NSOList{}
+	resourceName := resource.GetName()
+	resourceKind := resource.GetObjectKind().GroupVersionKind().Kind
+
+	// List all NSO resources in the same namespace
+	listOptions := &client.ListOptions{
+		Namespace: resource.GetNamespace(),
+	}
+
+	// Verify if there are NSO instances in the namespace
+	err := r.List(ctx, attachedNSOList, listOptions)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for _, nso := range attachedNSOList.Items {
+
+		nsoConfigMapName := nso.Spec.NsoConfigRef
+		nsoSecretName := nso.Spec.AdminCredentials.PasswordSecretRef
+
+		shouldReconcile := (resourceKind == "Secret" && nsoSecretName == resourceName) ||
+			(resourceKind == "ConfigMap" && nsoConfigMapName == resourceName)
+
+		if shouldReconcile {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      nso.GetName(),
+					Namespace: nso.GetNamespace(),
+				},
+			})
+
+			log.Info("Resource change detected. Reconciling NSO",
+				"nsoInstace", nso.GetName(),
+				"resourceChanged", "kind", resourceKind, "name", resourceName)
+		}
+	}
+
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *NSOReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&orchestrationciscocomv1alpha1.NSO{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.watchForResourceChange),
+		).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.watchForResourceChange),
+		).
 		Named("nso").
 		Complete(r)
 }

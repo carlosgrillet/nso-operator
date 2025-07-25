@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -51,7 +52,30 @@ var _ = Describe("NSO Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: orchestrationciscocomv1alpha1.NSOSpec{
+						Image:       "test-nso:latest",
+						ServiceName: "test-nso-service",
+						Replicas:    1,
+						LabelSelector: map[string]string{
+							"app": "nso-test",
+						},
+						Ports: []corev1.ServicePort{
+							{
+								Name: "http",
+								Port: 8080,
+							},
+							{
+								Name: "https",
+								Port: 8888,
+							},
+						},
+						NsoConfigRef: "test-nso-config",
+						AdminCredentials: orchestrationciscocomv1alpha1.Credentials{
+							Username:          "admin",
+							PasswordSecretRef: "test-admin-secret",
+						},
+						Env: []corev1.EnvVar{},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
