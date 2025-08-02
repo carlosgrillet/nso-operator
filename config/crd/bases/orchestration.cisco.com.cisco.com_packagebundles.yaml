@@ -1,0 +1,95 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: packagebundles.orchestration.cisco.com.cisco.com
+spec:
+  group: orchestration.cisco.com.cisco.com
+  names:
+    kind: PackageBundle
+    listKind: PackageBundleList
+    plural: packagebundles
+    singular: packagebundle
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PackageBundle is the Schema for the packagebundles API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of PackageBundle
+            properties:
+              credentials:
+                description: Credentials used for WEB or SSH connections.
+                properties:
+                  httpAuthSecretRef:
+                    description: HTTP authentication Secret name.
+                    type: string
+                  sshAuthSecretRef:
+                    description: SSH key Secret name.
+                    type: string
+                type: object
+              insecureTLS:
+                description: If set to true, self-signed certificates will be accepted
+                  for downloading or pulling.
+                type: boolean
+              origin:
+                description: Origin of the packages. Must be either "scm" or "url".
+                enum:
+                - SCM
+                - URL
+                type: string
+              source:
+                description: Credentials used for WEB or SSH connections.
+                properties:
+                  branch:
+                    description: URL of the repository or WEB where the packages are.
+                    type: string
+                  path:
+                    description: Path in the repository where the packages are.
+                    type: string
+                  url:
+                    description: URL of the repository or WEB where the packages are.
+                    type: string
+                required:
+                - url
+                type: object
+              targetName:
+                description: Name of the NSO instance where the packages are going
+                  to be loaded.
+                type: string
+            required:
+            - origin
+            - source
+            - targetName
+            type: object
+          status:
+            description: status defines the observed state of PackageBundle
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

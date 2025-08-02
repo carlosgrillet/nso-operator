@@ -1,0 +1,18 @@
+apiVersion: orchestration.cisco.com.cisco.com/v1alpha1
+kind: PackageBundle
+metadata:
+  labels:
+    app.kubernetes.io/name: nso-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: packagebundle-sample
+spec:
+  targetName: nso-sample 
+  origin: SCM
+  insecureTLS: false
+  credentials:
+    sshKeySecretRef: ssh-keys
+    httpAuthSecretRef: http-auth
+  source:
+    url: https://github.com/carlosgrillet/http-echo.git
+    branch: main
+    path: cmd/api
