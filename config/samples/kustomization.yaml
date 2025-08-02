@@ -3,4 +3,5 @@ resources:
 - orchestration.cisco.com_v1alpha1_nso.yaml
 - nso-sample-secret.yaml
 - nso-sample-cm.yaml
+- orchestration.cisco.com_v1alpha1_packagebundle.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
