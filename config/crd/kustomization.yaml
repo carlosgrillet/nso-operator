@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/orchestration.cisco.com.cisco.com_nsos.yaml
+- bases/orchestration.cisco.com.cisco.com_packagebundles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
