@@ -45,7 +45,7 @@ spec:
                   httpAuthSecretRef:
                     description: HTTP authentication Secret name.
                     type: string
-                  sshAuthSecretRef:
+                  sshKeySecretRef:
                     description: SSH key Secret name.
                     type: string
                 type: object
@@ -74,6 +74,9 @@ spec:
                 required:
                 - url
                 type: object
+              storageSize:
+                description: Size of the folder that will store the packages
+                type: string
               targetName:
                 description: Name of the NSO instance where the packages are going
                   to be loaded.

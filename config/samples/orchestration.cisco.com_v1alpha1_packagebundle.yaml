@@ -4,9 +4,10 @@ metadata:
   labels:
     app.kubernetes.io/name: nso-operator
     app.kubernetes.io/managed-by: kustomize
-  name: packagebundle-sample
+  name: prod-packages
 spec:
   targetName: nso-sample 
+  storageSize: "2Gi"
   origin: SCM
   insecureTLS: false
   credentials:

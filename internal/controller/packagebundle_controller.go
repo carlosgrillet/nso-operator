@@ -19,12 +19,15 @@ package controller
 import (
 	"context"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	orchestrationciscocomv1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
+	nsov1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
 )
 
 // PackageBundleReconciler reconciles a PackageBundle object
@@ -49,9 +52,33 @@ type PackageBundleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the PackageBundle instance
+	packageBundle := &nsov1alpha1.PackageBundle{}
+	err := r.Get(ctx, req.NamespacedName, packageBundle)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("PackageBundle resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed to get PackageBundle")
+		return ctrl.Result{}, err
+	}
+
+	// Create PVC
+	pvc := r.newPersistenVolumeClaim(ctx, packageBundle)
+	requeue, err := ensureObjectExists(ctx, r.Client, pvc)
+	if err != nil || requeue {
+		return ctrl.Result{Requeue: requeue}, nil
+	}
+
+	// Create Job
+	job := r.newJob(ctx, packageBundle)
+	requeue, err = ensureObjectExists(ctx, r.Client, job)
+	if err != nil || requeue {
+		return ctrl.Result{Requeue: requeue}, nil
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -59,7 +86,9 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *PackageBundleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&orchestrationciscocomv1alpha1.PackageBundle{}).
+		For(&nsov1alpha1.PackageBundle{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&batchv1.Job{}).
 		Named("packagebundle").
 		Complete(r)
 }
