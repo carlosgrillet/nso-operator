@@ -45,6 +45,10 @@ type PackageBundleSpec struct {
 	// Name of the NSO instance where the packages are going to be loaded.
 	TargetName string `json:"targetName"`
 
+	// +kubebuilder:validation:Optional
+	// Size of the folder that will store the packages
+	StorageSize string `json:"storageSize,omitempty"`
+
 	// +kubebuilder:validation:Required
 	// Origin of the packages. Must be either "scm" or "url".
 	Origin OriginType `json:"origin"`
@@ -65,7 +69,7 @@ type PackageBundleSpec struct {
 type AccessCredentials struct {
 	// +kubebuilder:validation:Optional
 	// SSH key Secret name.
-	SshKeySecretRef string `json:"sshAuthSecretRef,omitempty"`
+	SshKeySecretRef string `json:"sshKeySecretRef,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// HTTP authentication Secret name.

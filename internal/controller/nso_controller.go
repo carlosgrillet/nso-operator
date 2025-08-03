@@ -22,17 +22,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	orchestrationciscocomv1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
+	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
 // NSOReconciler reconciles a NSO object
@@ -62,7 +58,7 @@ func (r *NSOReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	log := logf.FromContext(ctx)
 
 	// Fetch the NSO instance
-	nso := &orchestrationciscocomv1alpha1.NSO{}
+	nso := &nsov1alpha1.NSO{}
 	err := r.Get(ctx, req.NamespacedName, nso)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -73,16 +69,16 @@ func (r *NSOReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// Objects to create - Service must be created first for StatefulSet
-
-	service := r.serviceForNSO(nso, ctx)
-	requeue, err := r.ensureObjectExists(ctx, service)
+	// Create NSO Service
+	service := r.newService(ctx, nso)
+	requeue, err := ensureObjectExists(ctx, r.Client, service)
 	if err != nil || requeue {
 		return ctrl.Result{Requeue: requeue}, nil
 	}
 
-	statefulSet := r.statefulSetForNSO(nso, ctx)
-	requeue, err = r.ensureObjectExists(ctx, statefulSet)
+	// Create NSO StatefulSet
+	statefulSet := r.newStatefulSet(ctx, nso)
+	requeue, err = ensureObjectExists(ctx, r.Client, statefulSet)
 	if err != nil || requeue {
 		return ctrl.Result{Requeue: requeue}, nil
 	}
@@ -90,177 +86,10 @@ func (r *NSOReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// Function to safely verify if the resource is created or not before reconcile
-func (r *NSOReconciler) ensureObjectExists(ctx context.Context, obj client.Object) (bool, error) {
-	log := logf.FromContext(ctx)
-
-	err := r.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
-
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating a new resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
-		err = r.Create(ctx, obj)
-		if err != nil {
-			log.Error(err, "Failed to create new resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
-			return false, err
-		}
-		return true, nil
-	} else if err != nil {
-		log.Error(err, "Failed to get resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
-		return false, err
-	}
-
-	log.Info("Skip reconcile: resource already exists", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return false, nil
-}
-
-func (r *NSOReconciler) statefulSetForNSO(nso *orchestrationciscocomv1alpha1.NSO, ctx context.Context) *appsv1.StatefulSet {
-	log := logf.FromContext(ctx)
-	statefulSetName := nso.Name
-	ncsConfigFileMode := int32(0600)
-	statefulSet := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      statefulSetName,
-			Namespace: nso.Namespace,
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: nso.Spec.ServiceName,
-			Replicas:    &nso.Spec.Replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: nso.Spec.LabelSelector,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: nso.Spec.LabelSelector,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "ncs",
-						Image: nso.Spec.Image,
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 8080,
-							Name:          "http",
-						}, {
-							ContainerPort: 8888,
-							Name:          "https",
-						}},
-						Env: append([]corev1.EnvVar{{
-							Name:  "ADMIN_USERNAME",
-							Value: nso.Spec.AdminCredentials.Username,
-						}, {
-							Name: "ADMIN_PASSWORD",
-							ValueFrom: &corev1.EnvVarSource{
-								SecretKeyRef: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: nso.Spec.AdminCredentials.PasswordSecretRef,
-									},
-									Key: "password",
-								},
-							},
-						}}, nso.Spec.Env...),
-						VolumeMounts: append([]corev1.VolumeMount{{
-							Name:      "ncs-config",
-							MountPath: "/etc/ncs/ncs.conf",
-							SubPath:   "ncs.conf",
-						}}, nso.Spec.VolumeMounts...),
-					}},
-					Volumes: append([]corev1.Volume{{
-						Name: "ncs-config",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "ncs-config",
-								},
-								Items: []corev1.KeyToPath{{
-									Key:  "ncs.conf",
-									Path: "ncs.conf",
-									Mode: &ncsConfigFileMode,
-								}},
-							},
-						},
-					}}, nso.Spec.Volumes...),
-				},
-			},
-		},
-	}
-	err := controllerutil.SetControllerReference(nso, statefulSet, r.Scheme)
-	if err != nil {
-		log.Error(err, "Failed to set controller reference for StatefulSet")
-		return &appsv1.StatefulSet{}
-	}
-	return statefulSet
-}
-
-func (r *NSOReconciler) serviceForNSO(nso *orchestrationciscocomv1alpha1.NSO, ctx context.Context) *corev1.Service {
-	log := logf.FromContext(ctx)
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      nso.Spec.ServiceName,
-			Namespace: nso.Namespace,
-			Labels:    nso.Spec.LabelSelector,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:      corev1.ServiceTypeClusterIP,
-			Selector:  nso.Spec.LabelSelector,
-			Ports:     nso.Spec.Ports,
-			ClusterIP: corev1.ClusterIPNone,
-		},
-	}
-	err := controllerutil.SetControllerReference(nso, service, r.Scheme)
-	if err != nil {
-		log.Error(err, "Failed to set controller reference for Service")
-		return &corev1.Service{}
-	}
-	return service
-}
-
-// Maps ConfigMap and Secrets changes to NSO reconcile requests
-func (r *NSOReconciler) watchForResourceChange(ctx context.Context, resource client.Object) []reconcile.Request {
-	log := logf.FromContext(ctx)
-	attachedNSOList := &orchestrationciscocomv1alpha1.NSOList{}
-	resourceName := resource.GetName()
-	resourceKind := resource.GetObjectKind().GroupVersionKind().Kind
-
-	// List all NSO resources in the same namespace
-	listOptions := &client.ListOptions{
-		Namespace: resource.GetNamespace(),
-	}
-
-	// Verify if there are NSO instances in the namespace
-	err := r.List(ctx, attachedNSOList, listOptions)
-	if err != nil {
-		return []reconcile.Request{}
-	}
-
-	requests := make([]reconcile.Request, 0)
-	for _, nso := range attachedNSOList.Items {
-
-		nsoConfigMapName := nso.Spec.NsoConfigRef
-		nsoSecretName := nso.Spec.AdminCredentials.PasswordSecretRef
-
-		shouldReconcile := (resourceKind == "Secret" && nsoSecretName == resourceName) ||
-			(resourceKind == "ConfigMap" && nsoConfigMapName == resourceName)
-
-		if shouldReconcile {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      nso.GetName(),
-					Namespace: nso.GetNamespace(),
-				},
-			})
-
-			log.Info("Resource change detected. Reconciling NSO",
-				"nsoInstace", nso.GetName(),
-				"resourceChanged", "kind", resourceKind, "name", resourceName)
-		}
-	}
-
-	return requests
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *NSOReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&orchestrationciscocomv1alpha1.NSO{}).
+		For(&nsov1alpha1.NSO{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Watches(
