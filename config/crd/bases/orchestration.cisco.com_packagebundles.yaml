@@ -4,17 +4,29 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: packagebundles.orchestration.cisco.com.cisco.com
+  name: packagebundles.orchestration.cisco.com
 spec:
-  group: orchestration.cisco.com.cisco.com
+  group: orchestration.cisco.com
   names:
     kind: PackageBundle
     listKind: PackageBundleList
     plural: packagebundles
+    shortNames:
+    - pb
     singular: packagebundle
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.targetName
+      name: Target
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PackageBundle is the Schema for the packagebundles API
@@ -88,6 +100,30 @@ spec:
             type: object
           status:
             description: status defines the observed state of PackageBundle
+            properties:
+              jobName:
+                description: JobName is the name of the Job responsible for downloading
+                  the packages
+                type: string
+              lastTransitionTime:
+                description: LastTransitionTime is the last time the status transitioned
+                  from one phase to another
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              phase:
+                description: Phase represents the current phase of the PackageBundle
+                  download process
+                enum:
+                - Pending
+                - ContainerCreating
+                - Downloading
+                - Downloaded
+                - FailedToDownload
+                type: string
             type: object
         required:
         - spec

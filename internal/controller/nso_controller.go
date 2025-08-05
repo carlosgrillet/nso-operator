@@ -37,9 +37,9 @@ type NSOReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=nsos,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=nsos/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=nsos/finalizers,verbs=update
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=nsos,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=nsos/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=nsos/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete

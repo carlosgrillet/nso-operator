@@ -1,7 +1,7 @@
 # This rule is not used by the project nso-operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to orchestration.cisco.com.cisco.com resources.
+# Grants read-only access to orchestration.cisco.com resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -14,7 +14,7 @@ metadata:
   name: nso-viewer-role
 rules:
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos
   verbs:
@@ -22,7 +22,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos/status
   verbs:

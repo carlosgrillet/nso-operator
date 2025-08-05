@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: nsos.orchestration.cisco.com.cisco.com
+  name: nsos.orchestration.cisco.com
 spec:
-  group: orchestration.cisco.com.cisco.com
+  group: orchestration.cisco.com
   names:
     kind: NSO
     listKind: NSOList

@@ -44,7 +44,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos
   - packagebundles
@@ -57,14 +57,14 @@ rules:
   - update
   - watch
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos/finalizers
   - packagebundles/finalizers
   verbs:
   - update
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos/status
   - packagebundles/status
