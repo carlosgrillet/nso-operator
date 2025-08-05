@@ -1,4 +1,4 @@
-apiVersion: orchestration.cisco.com.cisco.com/v1alpha1
+apiVersion: orchestration.cisco.com/v1alpha1
 kind: PackageBundle
 metadata:
   labels:

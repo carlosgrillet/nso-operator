@@ -36,9 +36,9 @@ type PackageBundleReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=packagebundles,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=packagebundles/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=orchestration.cisco.com.cisco.com,resources=packagebundles/finalizers,verbs=update
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
