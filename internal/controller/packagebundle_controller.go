@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -66,6 +68,14 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// Set initial status if not set
+	if packageBundle.Status.Phase == "" {
+		if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhasePending, "PackageBundle created", ""); err != nil {
+			log.Error(err, "Failed to set initial status")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// If already downloaded, skip job creation
 	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded {
 		return ctrl.Result{}, nil
@@ -74,15 +84,50 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Create PVC
 	pvc := r.newPersistenVolumeClaim(ctx, packageBundle)
 	requeue, err := ensureObjectExists(ctx, r.Client, pvc)
-	if err != nil || requeue {
-		return ctrl.Result{Requeue: requeue}, nil
+	if err != nil {
+		if updateErr := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseFailedToDownload, fmt.Sprintf("Failed to create PVC: %v", err), ""); updateErr != nil {
+			log.Error(updateErr, "Failed to update status after PVC creation failure")
+		}
+		return ctrl.Result{}, err
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Create Job
 	job := r.newJob(ctx, packageBundle)
+	jobName := job.Name
 	requeue, err = ensureObjectExists(ctx, r.Client, job)
-	if err != nil || requeue {
-		return ctrl.Result{Requeue: requeue}, nil
+	if err != nil {
+		if updateErr := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseFailedToDownload, fmt.Sprintf("Failed to create Job: %v", err), jobName); updateErr != nil {
+			log.Error(updateErr, "Failed to update status after Job creation failure")
+		}
+		return ctrl.Result{}, err
+	}
+	if requeue {
+		// Update status to indicate job is being created
+		if updateErr := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseContainerCreating, "Job created, waiting for containers", jobName); updateErr != nil {
+			log.Error(updateErr, "Failed to update status after Job creation")
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Check Job status and update PackageBundle phase accordingly
+	phase, message, err := getJobStatus(ctx, r.Client, jobName, packageBundle.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to get Job status", "job", jobName)
+		return ctrl.Result{RequeueAfter: time.Second * 30}, err
+	}
+
+	// Update PackageBundle status based on Job status
+	if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, phase, message, jobName); err != nil {
+		log.Error(err, "Failed to update PackageBundle status", "phase", phase)
+		return ctrl.Result{}, err
+	}
+
+	// Requeue if the job is still running or pending
+	if phase == nsov1alpha1.PackageBundlePhaseContainerCreating || phase == nsov1alpha1.PackageBundlePhaseDownloading {
+		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
 	return ctrl.Result{}, nil
