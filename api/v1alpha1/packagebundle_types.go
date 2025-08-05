@@ -28,6 +28,17 @@ const (
 	OriginTypeURL OriginType = "URL"
 )
 
+// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload
+type PackageBundlePhase string
+
+const (
+	PackageBundlePhasePending           PackageBundlePhase = "Pending"
+	PackageBundlePhaseContainerCreating PackageBundlePhase = "ContainerCreating"
+	PackageBundlePhaseDownloading       PackageBundlePhase = "Downloading"
+	PackageBundlePhaseDownloaded        PackageBundlePhase = "Downloaded"
+	PackageBundlePhaseFailedToDownload  PackageBundlePhase = "FailedToDownload"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -92,12 +103,29 @@ type PackageSource struct {
 
 // PackageBundleStatus defines the observed state of PackageBundle.
 type PackageBundleStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Phase represents the current phase of the PackageBundle download process
+	// +optional
+	Phase PackageBundlePhase `json:"phase,omitempty"`
+
+	// Message provides additional information about the current status
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// JobName is the name of the Job responsible for downloading the packages
+	// +optional
+	JobName string `json:"jobName,omitempty"`
+
+	// LastTransitionTime is the last time the status transitioned from one phase to another
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=pb
+// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetName`
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // PackageBundle is the Schema for the packagebundles API
 type PackageBundle struct {

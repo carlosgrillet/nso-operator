@@ -66,6 +66,11 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// If already downloaded, skip job creation
+	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded {
+		return ctrl.Result{}, nil
+	}
+
 	// Create PVC
 	pvc := r.newPersistenVolumeClaim(ctx, packageBundle)
 	requeue, err := ensureObjectExists(ctx, r.Client, pvc)

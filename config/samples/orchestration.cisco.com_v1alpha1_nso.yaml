@@ -8,8 +8,7 @@ metadata:
 spec:
   image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
   serviceName: "nso-prod"
-  replicas: 3
-  HA: yes
+  replicas: 1
   labelSelector:
     app: "nso"
   ports:
