@@ -19,19 +19,19 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 	err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
 
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating a new resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
+		log.Info("Creating a new resource")
 		err = c.Create(ctx, obj)
 		if err != nil {
-			log.Error(err, "Failed to create new resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
+			log.Error(err, "Failed to create new resource")
 			return false, err
 		}
 		return true, nil
 	} else if err != nil {
-		log.Error(err, "Failed to get resource", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
+		log.Error(err, "Failed to get resource")
 		return false, err
 	}
 
-	log.Info("Skip reconcile: resource already exists", "kind:", obj.GetObjectKind().GroupVersionKind(), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	log.V(1).Info("Skip reconcile: resource already exists")
 	return false, nil
 }
 
