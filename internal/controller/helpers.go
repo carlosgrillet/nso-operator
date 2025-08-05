@@ -48,7 +48,6 @@ func (r *NSOReconciler) watchForResourceChange(ctx context.Context, resource cli
 	}
 
 	// Verify if there are NSO instances in the namespace
-	// err := c.List(ctx, attachedNSOList, listOptions)
 	err := r.List(ctx, attachedNSOList, listOptions)
 	if err != nil {
 		return []reconcile.Request{}

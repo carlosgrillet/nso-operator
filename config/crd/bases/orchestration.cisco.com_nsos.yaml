@@ -14,7 +14,14 @@ spec:
     singular: nso
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.replicas
+      name: Replicas
+      type: string
+    - jsonPath: .spec.image
+      name: Image
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NSO is the Schema for the nsoes API.

@@ -191,7 +191,7 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 						Command: []string{"/bin/sh"},
 						Args: []string{
 							"-c",
-							"cd /packages && git clone https://github.com/kubernetes/kubernetes.git",
+							fmt.Sprintf("cd /packages && git clone %s", pb.Spec.Source.Url),
 						},
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      volumeName,
