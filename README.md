@@ -1,14 +1,22 @@
-# nso-operator
-// TODO(user): Add simple overview of use/purpose
+# NSO Operator
+
+A Kubernetes operator that manages Cisco NSO (Network Services Orchestrator) instances, lifecycle and much more.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+The NSO Operator helps you run Cisco NSO in Kubernetes clusters. NSO is software that automates network management tasks. This operator creates and manages:
+
+- **NSO instances**: Containers running NSO software that manage your network devices
+- **Package Bundles**: Downloads and installs NSO packages from Git repositories or web URLs
+
+The operator makes it easy to deploy NSO in Kubernetes and keep your network automation packages up to date.
 
 ## Getting Started
 
 ### Prerequisites
 - go version v1.24.0+
 - docker version 17.03+.
+- kind version v0.29.0+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
@@ -111,7 +119,15 @@ previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml
 is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+We welcome contributions! Here's how you can help:
+
+1. Fork this repository
+2. Create a new branch for your changes
+3. Make your changes and test them
+4. Submit a pull request with a clear description
+
+Please make sure your code follows the existing style and includes tests.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
