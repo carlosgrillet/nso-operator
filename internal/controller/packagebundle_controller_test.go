@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	orchestrationciscocomv1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
+	orchestrationciscocomv1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
 var _ = Describe("PackageBundle Controller", func() {

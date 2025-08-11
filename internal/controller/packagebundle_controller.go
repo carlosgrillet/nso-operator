@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	nsov1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
+	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
 // PackageBundleReconciler reconciles a PackageBundle object

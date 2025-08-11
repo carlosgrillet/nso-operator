@@ -13,7 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	nsov1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
+	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
 // Function to safely verify if the resource is created or not before reconcile
