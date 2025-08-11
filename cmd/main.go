@@ -37,8 +37,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	orchestrationciscocomv1alpha1 "wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1"
-	"wwwin-github.cisco.com/cgrillet/nso-operator/internal/controller"
+	orchestrationciscocomv1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
+	"github.com/carlosgrillet/nso-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

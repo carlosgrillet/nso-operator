@@ -7,7 +7,7 @@ domain: cisco.com
 layout:
 - go.kubebuilder.io/v4
 projectName: nso-operator
-repo: wwwin-github.cisco.com/cgrillet/nso-operator
+repo: github.com/carlosgrillet/nso-operator
 resources:
 - api:
     crdVersion: v1
@@ -16,6 +16,6 @@ resources:
   domain: cisco.com
   group: orchestration.cisco.com
   kind: NSO
-  path: wwwin-github.cisco.com/cgrillet/nso-operator/api/v1alpha1
+  path: github.com/carlosgrillet/nso-operator/api/v1alpha1
   version: v1alpha1
 version: "3"
