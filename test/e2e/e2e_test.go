@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"wwwin-github.cisco.com/cgrillet/nso-operator/test/utils"
+	"github.com/carlosgrillet/nso-operator/test/utils"
 )
 
 // namespace where the project is deployed in
