@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the nso-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- packagebundle_admin_role.yaml
+- packagebundle_editor_role.yaml
+- packagebundle_viewer_role.yaml
 - nso_admin_role.yaml
 - nso_editor_role.yaml
 - nso_viewer_role.yaml

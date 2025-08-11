@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - persistentvolumeclaims
   - secrets
   - services
   verbs:
@@ -31,9 +32,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - batch
   resources:
-  - nsos
+  - jobs
   verbs:
   - create
   - delete
@@ -43,15 +44,30 @@ rules:
   - update
   - watch
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
+  resources:
+  - nsos
+  - packagebundles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - orchestration.cisco.com
   resources:
   - nsos/finalizers
+  - packagebundles/finalizers
   verbs:
   - update
 - apiGroups:
-  - orchestration.cisco.com.cisco.com
+  - orchestration.cisco.com
   resources:
   - nsos/status
+  - packagebundles/status
   verbs:
   - get
   - patch
