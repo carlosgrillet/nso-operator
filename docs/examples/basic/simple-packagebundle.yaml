@@ -1,0 +1,47 @@
+# Simple PackageBundle Example
+# Downloads packages from a public Git repository
+apiVersion: orchestration.cisco.com/v1alpha1
+kind: PackageBundle
+metadata:
+  name: demo-packages
+  namespace: default
+  labels:
+    package-type: demo
+    source: git
+spec:
+  # Target NSO instance
+  targetName: "simple-nso"
+  
+  # Storage size for packages
+  storageSize: "5Gi"
+  
+  # Git source
+  origin: "SCM"
+  source:
+    url: "https://github.com/nso-demo/packages.git"
+    branch: "main"
+    path: "demo/"
+---
+# Example with HTTP source
+apiVersion: orchestration.cisco.com/v1alpha1
+kind: PackageBundle
+metadata:
+  name: http-packages
+  namespace: default
+  labels:
+    package-type: http-demo
+    source: http
+spec:
+  # Target NSO instance
+  targetName: "simple-nso"
+  
+  # Storage for downloaded packages
+  storageSize: "2Gi"
+  
+  # HTTP source
+  origin: "URL"
+  source:
+    url: "https://example.com/packages/demo-packages.tar.gz"
+  
+  # Accept self-signed certificates for demo
+  insecureTLS: true
