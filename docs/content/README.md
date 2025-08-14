@@ -1,12 +1,15 @@
 # NSO Operator Documentation
 
+!!! warning "Warning"
+    This site is still under construction. Commands of references may be outdated or inaccurate.
+
 Welcome to the NSO Operator documentation! This guide will help you understand, deploy, and manage Cisco NSO instances in Kubernetes clusters.
 
 ## Quick Links
 
 - **New to NSO Operator?** Start with our [Quick Start Guide](getting-started/quick-start.md)
 - **Need to install?** Check the [Installation Guide](getting-started/installation.md)
-- **Looking for examples?** Browse our [Examples](examples/)
+- **Looking for examples?** Browse our [Examples](examples/basic/README.md)
 - **Having issues?** See [Troubleshooting](user-guide/troubleshooting.md) or [FAQ](faq.md)
 
 ## Documentation Structure
@@ -57,8 +60,7 @@ Welcome to the NSO Operator documentation! This guide will help you understand, 
 
 ## Support
 
-- **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/your-org/nso-operator/issues)
-- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/your-org/nso-operator/discussions)
+- **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/carlosgrillet/nso-operator/issues)
 
 ## Contributing
 
@@ -66,4 +68,4 @@ We welcome contributions! Please see our [Contributing Guide](developer-guide/co
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](../LICENSE) file for details.
+This project is licensed under the Apache License 2.0.
