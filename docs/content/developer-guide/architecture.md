@@ -8,40 +8,17 @@ The NSO Operator is a Kubernetes operator built using the Operator SDK and contr
 
 ## High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster                           │
-│                                                                 │
-│  ┌─────────────────┐    ┌─────────────────┐                   │
-│  │   NSO Operator  │    │  Package Jobs   │                   │
-│  │   Controllers   │    │  (Download)     │                   │
-│  └─────────────────┘    └─────────────────┘                   │
-│           │                       │                           │
-│           │ manages               │ creates                   │
-│           ▼                       ▼                           │
-│  ┌─────────────────┐    ┌─────────────────┐                   │
-│  │ NSO Deployments │    │ Package Storage │                   │
-│  │  & Services     │    │     (PVCs)      │                   │
-│  └─────────────────┘    └─────────────────┘                   │
-│           │                       │                           │
-│           │ provides              │ mounts                    │
-│           ▼                       ▼                           │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                NSO Instances                            │   │
-│  │          ┌───────┐  ┌───────┐  ┌───────┐                │   │
-│  │          │ NSO-1 │  │ NSO-2 │  │ NSO-N │                │   │
-│  │          └───────┘  └───────┘  └───────┘                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           │                                     │
-└───────────────────────────┼─────────────────────────────────────┘
-                            │
-                            ▼
-               ┌─────────────────────────────┐
-               │     Network Devices        │
-               │   ┌─────┐ ┌─────┐ ┌─────┐  │
-               │   │Dev-1│ │Dev-2│ │Dev-N│  │
-               │   └─────┘ └─────┘ └─────┘  │
-               └─────────────────────────────┘
+``` mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  User->>Kubernetes: Create NSO instance
+  loop control loop
+    Operator-->>Kubernetes: WATCH NSO
+    Operator->>Operator: reconcile
+    Operator-->>Kubernetes: Create|Delete|Patch
+  end
+  Kubernetes->>User: Success|Failure
 ```
 
 ## Core Components
