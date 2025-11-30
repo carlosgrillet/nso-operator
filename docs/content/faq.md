@@ -440,7 +440,7 @@ spec:
 
 ### Q: Is commercial support available?
 
-**A:** Yes, commercial support may be available through Cisco or certified partners. Contact your Cisco representative for details.
+**A:** Not yet.
 
 ## Still Have Questions?
 
