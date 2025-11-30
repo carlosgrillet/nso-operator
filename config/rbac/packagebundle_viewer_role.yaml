@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: nso-operator
     app.kubernetes.io/managed-by: kustomize
-  name: nso-viewer-role
+  name: packagebundle-viewer-role
 rules:
 - apiGroups:
   - orchestration.cisco.com
   resources:
-  - nsos
+  - packagebundles
   verbs:
   - get
   - list
@@ -24,6 +24,6 @@ rules:
 - apiGroups:
   - orchestration.cisco.com
   resources:
-  - nsos/status
+  - packagebundles/status
   verbs:
   - get
