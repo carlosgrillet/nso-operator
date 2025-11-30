@@ -8,22 +8,21 @@ This guide covers different methods to install the NSO Operator in your Kubernet
 First, install the Custom Resource Definitions:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/your-org/nso-operator/main/config/crd/bases/orchestration.cisco.com_nsos.yaml
-kubectl apply -f https://raw.githubusercontent.com/your-org/nso-operator/main/config/crd/bases/orchestration.cisco.com_packagebundles.yaml
+kubectl apply -f //TODO
 ```
 
 ### Install Operator
 Install the operator and required RBAC:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/your-org/nso-operator/main/dist/install.yaml
+kubectl apply -f //TODO
 ```
 
 ### Verify Installation
 Check that the operator is running:
 
 ```bash
-kubectl get pods -n nso-operator-system
+kubectl get pods -n nso-system
 ```
 
 You should see output similar to:
@@ -32,34 +31,14 @@ NAME                                        READY   STATUS    RESTARTS   AGE
 nso-operator-controller-manager-xxx-xxx     2/2     Running   0          1m
 ```
 
-## Method 2: Using Helm
-
-### Add Helm Repository
-```bash
-helm repo add nso-operator https://your-org.github.io/nso-operator
-helm repo update
-```
-
-### Install with Helm
-```bash
-helm install nso-operator nso-operator/nso-operator \
-  --namespace nso-operator-system \
-  --create-namespace
-```
-
-### Verify Installation
-```bash
-helm status nso-operator -n nso-operator-system
-```
-
-## Method 3: Build and Deploy from Source
+## Method 2: Build and Deploy from Source
 
 ### Prerequisites
 Ensure you have the development prerequisites from [Prerequisites](prerequisites.md).
 
 ### Clone Repository
 ```bash
-git clone https://github.com/your-org/nso-operator.git
+git clone https://github.com/carlosgrillet/nso-operator.git
 cd nso-operator
 ```
 
@@ -89,20 +68,6 @@ The operator can be configured using environment variables or command-line flags
 | `ENABLE_LEADER_ELECTION` | `false` | Enable leader election |
 | `HEALTH_PROBE_ADDR` | `:8081` | Health probe address |
 
-### Namespace Configuration
-By default, the operator is installed in the `nso-operator-system` namespace. To use a different namespace:
-
-```bash
-# For kubectl installation
-kubectl create namespace my-operator-namespace
-# Edit the install.yaml to use your namespace before applying
-
-# For Helm installation
-helm install nso-operator nso-operator/nso-operator \
-  --namespace my-operator-namespace \
-  --create-namespace
-```
-
 ## Post-Installation
 
 ### Verify Resources
@@ -113,10 +78,10 @@ Check that all resources were created:
 kubectl get crd | grep orchestration.cisco.com
 
 # Check operator deployment
-kubectl get deployment -n nso-operator-system
+kubectl get deployment -n nso-system
 
 # Check service account and RBAC
-kubectl get serviceaccount -n nso-operator-system
+kubectl get serviceaccount -n nso-system
 kubectl get clusterrole | grep nso-operator
 ```
 
@@ -124,7 +89,7 @@ kubectl get clusterrole | grep nso-operator
 View operator logs to ensure it's running correctly:
 
 ```bash
-kubectl logs -n nso-operator-system deployment/nso-operator-controller-manager
+kubectl logs -n nso-system deployment/nso-operator-controller-manager
 ```
 
 ### Test Installation
@@ -155,27 +120,16 @@ kubectl get nso test-nso -o yaml
 kubectl apply -f https://raw.githubusercontent.com/your-org/nso-operator/main/dist/install.yaml
 ```
 
-### Using Helm
-```bash
-helm repo update
-helm upgrade nso-operator nso-operator/nso-operator -n nso-operator-system
-```
-
 ## Uninstalling
 
 ### Using kubectl
 ```bash
 # Delete operator
-kubectl delete -f https://raw.githubusercontent.com/your-org/nso-operator/main/dist/install.yaml
+kubectl delete -f //TODO
 
 # Delete CRDs (this will also delete all NSO and PackageBundle resources)
 kubectl delete crd nsos.orchestration.cisco.com
 kubectl delete crd packagebundles.orchestration.cisco.com
-```
-
-### Using Helm
-```bash
-helm uninstall nso-operator -n nso-operator-system
 ```
 
 ### Clean up CRDs (if needed)

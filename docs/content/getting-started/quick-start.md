@@ -52,53 +52,28 @@ kubectl create secret docker-registry nso-registry-secret \
 Create a file called `my-first-nso.yaml`:
 
 ```yaml
-apiVersion: orchestration.cisco.com/v1alpha1
+apiVersion: orchestration.cisco.com.cisco.com/v1alpha1
 kind: NSO
 metadata:
-  name: my-first-nso
-  namespace: nso-demo
+  name: nso-sample
 spec:
-  # NSO container image
-  image: "your-registry/nso:6.3"
-  
-  # Number of replicas
+  image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
+  serviceName: "nso-prod"
   replicas: 1
-  
-  # Admin credentials
-  adminSecret:
-    name: nso-admin-secret
-  
-  # Image pull secrets (if using private registry)
-  imagePullSecrets:
-    - name: nso-registry-secret
-  
-  # Resource limits
-  resources:
-    limits:
-      memory: "2Gi"
-      cpu: "1000m"
-    requests:
-      memory: "1Gi"
-      cpu: "500m"
-  
-  # Storage for NSO data
-  storage:
-    size: "10Gi"
-    storageClassName: "default"
-  
-  # Service configuration
-  service:
-    type: LoadBalancer
-    ports:
-      - name: netconf
-        port: 2022
-        targetPort: 2022
-      - name: webui
-        port: 8080
-        targetPort: 8080
-      - name: rest
-        port: 8888
-        targetPort: 8888
+  labelSelector:
+    app: "nso"
+  ports:
+    - name: "http"
+      port: 8080 
+    - name: "https"
+      port: 8888 
+  adminCredentials:
+    username: admin
+    passwordSecretRef: nso-admin-password
+  nsoConfigRef: nso-config
+  env:
+    - name: MY_ENV
+      value: "container variable"
 ```
 
 Apply the configuration:
@@ -124,7 +99,7 @@ kubectl get pods -n nso-demo
 View operator logs if needed:
 
 ```bash
-kubectl logs -n nso-operator-system deployment/nso-operator-controller-manager -f
+kubectl logs -n nso-system deployment/nso-operator-controller-manager -f
 ```
 
 ## Step 6: Access NSO
