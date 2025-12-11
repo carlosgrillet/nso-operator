@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -213,8 +214,30 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	pvcName := fmt.Sprintf("%s-%s", pb.Name, pb.Spec.TargetName)
 	jobName := fmt.Sprintf("download-%s", pb.Name)
 	volumeName := "package-storage"
+	repoPath := "/packages/repo"
 	var ttlSecondsAfterFinished int32 = 300
 	var backoffLimit int32 = 3
+
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot:             ptr.To(true),
+		RunAsUser:                ptr.To(int64(1000)),
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+
+	resources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -226,14 +249,25 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
+					InitContainers: []corev1.Container{{
+						Name:            "downloader",
+						Image:           "alpine/git",
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, repoPath},
+						Resources:       resources,
+						SecurityContext: securityContext,
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      volumeName,
+							MountPath: "/packages",
+						}},
+					}},
 					Containers: []corev1.Container{{
-						Name:    "downloader",
-						Image:   "alpine/git",
-						Command: []string{"/bin/sh"},
-						Args: []string{
-							"-c",
-							fmt.Sprintf("cd /packages && git clone %s", pb.Spec.Source.Url),
-						},
+						Name:            "builder",
+						Image:           "alpine/git",                       // TODO: here goes the nso build image
+						Command:         []string{"git", "ls-tree", "HEAD"}, // this is just a test
+						WorkingDir:      repoPath + "/src",
+						Resources:       resources,
+						SecurityContext: securityContext,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      volumeName,
 							MountPath: "/packages",
