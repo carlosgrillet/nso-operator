@@ -37,6 +37,12 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 		return false, err
 	}
 
+	// Resource exists - Check if it's a Job (which is immutable)
+	if _, isJob := obj.(*batchv1.Job); isJob {
+		log.V(1).Info("Job already exists, skipping update (Jobs are immutable)")
+		return false, nil
+	}
+
 	// Resource exists - update it with the NEW desired state
 	log.Info("Resource exists, updating to match desired state")
 	obj.SetResourceVersion(existing.GetResourceVersion())
