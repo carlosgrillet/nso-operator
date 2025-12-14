@@ -41,6 +41,7 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 	log.Info("Resource exists, updating to match desired state")
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	err = c.Update(ctx, obj)
+	
 	if err != nil {
 		log.Error(err, "Failed to update resource")
 		return false, err
