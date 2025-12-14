@@ -20,7 +20,9 @@ import (
 func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
+	// Create a copy to check if resource exists
+	existing := obj.DeepCopyObject().(client.Object)
+	err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
 
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating a new resource")
@@ -35,7 +37,15 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 		return false, err
 	}
 
-	log.V(1).Info("Skip reconcile: resource already exists")
+	// Resource exists - update it with the NEW desired state
+	log.Info("Resource exists, updating to match desired state")
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	err = c.Update(ctx, obj)
+	if err != nil {
+		log.Error(err, "Failed to update resource")
+		return false, err
+	}
+	
 	return false, nil
 }
 
