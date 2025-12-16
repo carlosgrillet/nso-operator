@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -37,9 +38,14 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 		return false, err
 	}
 
-	// Resource exists - Check if it's a Job (which is immutable)
+	// Resource exists - Check if it's a Job or PVC (which have immutable specs)
 	if _, isJob := obj.(*batchv1.Job); isJob {
 		log.V(1).Info("Job already exists, skipping update (Jobs are immutable)")
+		return false, nil
+	}
+
+	if _, isPVC := obj.(*corev1.PersistentVolumeClaim); isPVC {
+		log.V(1).Info("PersistentVolumeClaim already exists, skipping update (PVC specs are immutable)")
 		return false, nil
 	}
 
