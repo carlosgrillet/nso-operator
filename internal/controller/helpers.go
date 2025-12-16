@@ -5,6 +5,7 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,7 +21,9 @@ import (
 func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
+	// Create a copy to check if resource exists
+	existing := obj.DeepCopyObject().(client.Object)
+	err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
 
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating a new resource")
@@ -35,7 +38,27 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 		return false, err
 	}
 
-	log.V(1).Info("Skip reconcile: resource already exists")
+	// Resource exists - Check if it's a Job or PVC (which have immutable specs)
+	if _, isJob := obj.(*batchv1.Job); isJob {
+		log.V(1).Info("Job already exists, skipping update (Jobs are immutable)")
+		return false, nil
+	}
+
+	if _, isPVC := obj.(*corev1.PersistentVolumeClaim); isPVC {
+		log.V(1).Info("PersistentVolumeClaim already exists, skipping update (PVC specs are immutable)")
+		return false, nil
+	}
+
+	// Resource exists - update it with the NEW desired state
+	log.Info("Resource exists, updating to match desired state")
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	err = c.Update(ctx, obj)
+
+	if err != nil {
+		log.Error(err, "Failed to update resource")
+		return false, err
+	}
+
 	return false, nil
 }
 
