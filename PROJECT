@@ -8,6 +8,7 @@ layout:
 - go.kubebuilder.io/v4
 projectName: nso-operator
 repo: github.com/carlosgrillet/nso-operator
+repo: github.com/carlosgrillet/nso-operator
 resources:
 - api:
     crdVersion: v1
