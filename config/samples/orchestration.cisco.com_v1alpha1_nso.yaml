@@ -1,4 +1,4 @@
-apiVersion: orchestration.cisco.com.cisco.com/v1alpha1
+apiVersion: orchestration.cisco.com/v1alpha1
 kind: NSO
 metadata:
   labels:
@@ -8,11 +8,11 @@ metadata:
 spec:
   image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
   serviceName: "nso-prod"
-  replicas: 1
+  replicas: 2
   labelSelector:
     app: "nso"
   ports:
-    - name: "http"
+    - name: "http" 
       port: 8080 
     - name: "https"
       port: 8888 

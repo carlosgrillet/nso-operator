@@ -1,0 +1,77 @@
+# Simple NSO Instance
+# This is a minimal NSO deployment suitable for development and testing
+apiVersion: orchestration.cisco.com/v1alpha1
+kind: NSO
+metadata:
+  name: simple-nso
+  namespace: default
+  labels:
+    app: nso
+    environment: dev
+spec:
+  # NSO container image
+  image: "cisco/nso:6.3"
+  
+  # Single replica for development
+  replicas: 1
+  
+  # Service configuration
+  serviceName: "simple-nso-service"
+  
+  # Pod selector labels
+  labelSelector:
+    app: nso
+    instance: simple
+  
+  # Standard NSO ports
+  ports:
+    - name: netconf
+      port: 2022
+      targetPort: 2022
+      protocol: TCP
+    - name: webui
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: restconf
+      port: 8888
+      targetPort: 8888
+      protocol: TCP
+  
+  # Basic configuration reference
+  nsoConfigRef: "simple-nso-config"
+  
+  # Admin credentials
+  adminCredentials:
+    username: "admin"
+    passwordSecretRef: "simple-nso-admin"
+  
+  # Basic environment settings
+  env:
+    - name: NSO_LOG_LEVEL
+      value: "info"
+---
+# Admin credentials secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: simple-nso-admin
+  namespace: default
+type: Opaque
+data:
+  # Password: admin123 (base64 encoded)
+  password: YWRtaW4xMjM=
+---
+# Basic NSO configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-nso-config
+  namespace: default
+data:
+  nso.conf: |
+    # Enable basic NSO services
+    /ncs-config/logs/syslog-config/facility local7
+    /ncs-config/webui/enabled true
+    /ncs-config/restconf/enabled true
+    /ncs-config/netconf-north-bound/enabled true

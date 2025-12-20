@@ -1,0 +1,71 @@
+site_name: NSO Operator
+site_url: https://carlosgrillet.github.io/nso-operator/
+site_description: Documentation
+site_author: Carlos Grillet
+site_description: >-
+  Deploy and manage Cisco NSO instances in Kubernetes clusters.
+
+repo_name: carlosgrillet/nso-operator
+repo_url: https://github.com/carlosgrillet/nso-operator
+
+docs_dir: 'content'
+
+copyright: 'Cisco Systems • Copyright &copy; 2025'
+
+theme:
+  name: material
+  language: en
+  favicon: assets/img/nso-logo.png
+  logo: assets/img/nso-logo.png
+  include_sidebar: true
+  palette:
+    primary: 'black'
+    accent: 'indigo'
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+markdown_extensions:
+  - meta
+  - attr_list
+  - admonition
+  - footnotes
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+      - name: mermaid
+        class: mermaid
+        format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed
+  - pymdownx.tasklist
+nav:
+  - Home: README.md
+  - Getting Started:
+      - Prerequisites: getting-started/prerequisites.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - User Guide:
+      - Configuration: user-guide/configuration.md
+      - Monitoring: user-guide/monitoring.md
+      - NSO Instances: user-guide/nso-instances.md
+      - Package Bundles: user-guide/package-bundles.md
+      - Troubleshooting: user-guide/troubleshooting.md
+  - Developer Guide:
+      - Architecture: developer-guide/architecture.md
+  - API Reference:
+      - NSO CRD: api-reference/nso-crd.md
+      - PackageBundle CRD: api-reference/packagebundle-crd.md
+      - Status Conditions: api-reference/status-conditions.md
+  - Examples:
+      - Basic: examples/basic/README.md
+      - Production: examples/production/README.md
+  - Tutorials:
+      - Basic NSO Deployment: tutorials/basic-nso-deployment.md
+  - Operations:
+      - Deployment Strategies: operations/deployment-strategies.md
+  - FAQ: faq.md
+  - Glossary: glossary.md
