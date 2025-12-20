@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
+	orchestrationciscocomv1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
 // NSOReconciler reconciles a NSO object
