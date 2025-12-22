@@ -28,7 +28,7 @@ const (
 	OriginTypeURL OriginType = "URL"
 )
 
-// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload
+// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload;Loaded
 type PackageBundlePhase string
 
 const (
@@ -37,6 +37,7 @@ const (
 	PackageBundlePhaseDownloading       PackageBundlePhase = "Downloading"
 	PackageBundlePhaseDownloaded        PackageBundlePhase = "Downloaded"
 	PackageBundlePhaseFailedToDownload  PackageBundlePhase = "FailedToDownload"
+	PackageBundlePhaseLoaded            PackageBundlePhase = "Loaded"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
