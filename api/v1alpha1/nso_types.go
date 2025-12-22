@@ -67,6 +67,9 @@ type NSOSpec struct {
 	// +kubebuilder:validation:Optional
 	// NSO volumes.
 	Volumes []corev1.Volume `json:"volumes"`
+
+	// +kubebuilder:validation:Optional
+	CDBStorageSize string `json:"cdbStorageSize,omitempty"`
 }
 
 // Credentials for admin user.
