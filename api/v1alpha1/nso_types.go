@@ -69,6 +69,7 @@ type NSOSpec struct {
 	Volumes []corev1.Volume `json:"volumes"`
 
 	// +kubebuilder:validation:Optional
+	// Storage size for the CDB (Configuration Database) persistent volume. Default: 5Gi if not specified.
 	CDBStorageSize string `json:"cdbStorageSize,omitempty"`
 }
 

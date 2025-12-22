@@ -33,9 +33,9 @@ import (
 
 func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.PersistentVolumeClaim {
 	log := logf.FromContext(ctx)
-	size := "5Gi"
+	defaultSize := "5Gi"
 	if nso.Spec.CDBStorageSize != "" {
-		size = nso.Spec.CDBStorageSize
+		defaultSize = nso.Spec.CDBStorageSize
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
@@ -49,7 +49,7 @@ func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *ns
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(size),
+					corev1.ResourceStorage: resource.MustParse(defaultSize),
 				},
 			},
 		},
