@@ -41,6 +41,7 @@ type PackageBundleReconciler struct {
 // +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles/finalizers,verbs=update
+// +kubebuilder:rbac:groups=orchestration.cisco.com,resources=nsoes,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
@@ -76,8 +77,17 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// If already downloaded, skip job creation
+	// If already loaded, nothing to do
+	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseLoaded {
+		return ctrl.Result{}, nil
+	}
+
+	// If downloaded, proceed to mount the PVC
 	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded {
+		if err := r.mountPVCToNSO(ctx, packageBundle); err != nil {
+			log.Error(err, "Failed to mount PVC to NSO instance")
+			return ctrl.Result{RequeueAfter: time.Second * 30}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -130,7 +140,84 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
+	// If job succeeded, the phase will be Downloaded and on next reconcile the PVC will be mounted
 	return ctrl.Result{}, nil
+}
+
+// mountPVCToNSO mounts the PVC to the NSO instance specified in targetName
+func (r *PackageBundleReconciler) mountPVCToNSO(ctx context.Context, packageBundle *nsov1alpha1.PackageBundle) error {
+	log := logf.FromContext(ctx)
+
+	// Get the NSO instance
+	nso := &nsov1alpha1.NSO{}
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      packageBundle.Spec.TargetName,
+		Namespace: packageBundle.Namespace,
+	}, nso)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "NSO instance not found", "targetName", packageBundle.Spec.TargetName)
+			return fmt.Errorf("NSO instance %s not found: %w", packageBundle.Spec.TargetName, err)
+		}
+		return err
+	}
+
+	// Prepare the PVC name and volume name
+	pvcName := fmt.Sprintf("%s-%s", packageBundle.Name, packageBundle.Spec.TargetName)
+	volumeName := fmt.Sprintf("package-%s", packageBundle.Name)
+	mountPath := "/nso/run/packages"
+	packagesFolder := normalizePathString(packageBundle.Spec.Source.Path)
+
+	// Check if volume is already mounted
+	volumeExists := false
+	for _, vol := range nso.Spec.Volumes {
+		if vol.Name == volumeName {
+			volumeExists = true
+			break
+		}
+	}
+
+	// If volume doesn't exist, add it
+	if !volumeExists {
+		log.Info("Adding PVC volume to NSO instance", "nso", nso.Name, "pvc", pvcName)
+
+		// Add the volume
+		nso.Spec.Volumes = append(nso.Spec.Volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		})
+
+		// Add the volume mount to the NSO container
+		nso.Spec.VolumeMounts = append(nso.Spec.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: mountPath,
+			SubPath:   packagesFolder,
+		})
+
+		// Update the NSO instance
+		if err := r.Update(ctx, nso); err != nil {
+			log.Error(err, "Failed to update NSO instance with PVC mount")
+			return err
+		}
+
+		log.Info("Successfully mounted PVC to NSO instance", "nso", nso.Name, "pvc", pvcName, "mountPath", mountPath)
+	} else {
+		log.Info("PVC already mounted to NSO instance", "nso", nso.Name, "pvc", pvcName)
+	}
+
+	// Update PackageBundle status to Loaded
+	if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseLoaded,
+		fmt.Sprintf("Package successfully loaded to NSO instance %s at %s", nso.Name, mountPath),
+		packageBundle.Status.JobName); err != nil {
+		log.Error(err, "Failed to update PackageBundle status to Loaded")
+		return err
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
