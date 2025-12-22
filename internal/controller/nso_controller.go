@@ -72,7 +72,7 @@ func (r *NSOReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	cdbPVC := r.newCDBPersistentVolumeClaim(ctx, nso)
 	requeue, err := ensureObjectExists(ctx, r.Client, cdbPVC)
 	if err != nil || requeue {
-		return ctrl.Result{Requeue: requeue}, err 
+		return ctrl.Result{Requeue: requeue}, err
 	}
 
 	// Create NSO Service

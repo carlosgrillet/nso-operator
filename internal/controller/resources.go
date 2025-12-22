@@ -32,6 +32,7 @@ import (
 )
 
 func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.PersistentVolumeClaim {
+	log := logf.FromContext(ctx)
 	size := "5Gi"
 	if nso.Spec.CDBStorageSize != "" {
 		size = nso.Spec.CDBStorageSize
@@ -39,23 +40,28 @@ func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *ns
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:	fmt.Sprintf("%s-cdb", nso.Name),
-			Namespace : nso.Namespace,
+			Name:      fmt.Sprintf("%s-cdb", nso.Name),
+			Namespace: nso.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources : corev1.VolumeResourceRequirements{
+			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse(size),
 				},
 			},
 		},
 	}
-	controllerutil.SetControllerReference(nso, pvc, r.Scheme)
+	err := controllerutil.SetControllerReference(nso, pvc, r.Scheme)
+	if err != nil {
+		log.Error(err, "Failed to set controller reference for CDB PVC")
+		return &corev1.PersistentVolumeClaim{}
+	}
 	return pvc
 }
+
 // Create a new Headless Service for NSO StatefulSet
 func (r *NSOReconciler) newService(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.Service {
 	log := logf.FromContext(ctx)
