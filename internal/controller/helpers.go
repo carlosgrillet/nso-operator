@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -187,4 +188,9 @@ func getJobStatus(ctx context.Context, c client.Client, jobName, namespace strin
 
 	// Default case
 	return nsov1alpha1.PackageBundlePhasePending, "Job status unknown", nil
+}
+
+func normalizePathString(path string) string {
+	path = strings.TrimSpace(path)
+	return strings.Trim(path, "/")
 }
