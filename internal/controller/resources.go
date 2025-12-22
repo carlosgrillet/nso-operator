@@ -214,7 +214,8 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	pvcName := fmt.Sprintf("%s-%s", pb.Name, pb.Spec.TargetName)
 	jobName := fmt.Sprintf("download-%s", pb.Name)
 	volumeName := "package-storage"
-	repoPath := "/packages/repo"
+	volumeMountPath := "/repo"
+	packagesPath := normalizePathString(pb.Spec.Source.Path)
 	var ttlSecondsAfterFinished int32 = 300
 	var backoffLimit int32 = 3
 
@@ -253,24 +254,24 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 						Name:            "downloader",
 						Image:           "alpine/git",
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, repoPath},
+						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, volumeMountPath},
 						Resources:       resources,
 						SecurityContext: securityContext,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      volumeName,
-							MountPath: "/packages",
+							MountPath: volumeMountPath,
 						}},
 					}},
 					Containers: []corev1.Container{{
-						Name:            "builder",
-						Image:           "alpine/git",                       // TODO: here goes the nso build image
-						Command:         []string{"git", "ls-tree", "HEAD"}, // this is just a test
-						WorkingDir:      repoPath + "/src",
-						Resources:       resources,
-						SecurityContext: securityContext,
+						Name:       "builder",
+						Image:      "carlosgrillet/cisco-nso:6.1.19-build",
+						Command:    []string{"/bin/sh", "-c"},
+						Args:       []string{fmt.Sprintf("for dir in %s/*/src; do echo \"$dir\"; cd \"$dir\" && make clean all; done", packagesPath)},
+						WorkingDir: volumeMountPath,
+						Resources:  resources,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      volumeName,
-							MountPath: "/packages",
+							MountPath: volumeMountPath,
 						}},
 					}},
 					Volumes: []corev1.Volume{{
