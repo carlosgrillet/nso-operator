@@ -123,6 +123,7 @@ spec:
                 - Downloading
                 - Downloaded
                 - FailedToDownload
+                - Loaded
                 type: string
             type: object
         required:

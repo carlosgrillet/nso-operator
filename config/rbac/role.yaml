@@ -46,6 +46,16 @@ rules:
 - apiGroups:
   - orchestration.cisco.com
   resources:
+  - nsoes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - orchestration.cisco.com
+  resources:
   - nsos
   - packagebundles
   verbs:
