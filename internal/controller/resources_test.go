@@ -186,14 +186,16 @@ var _ = Describe("Resource Creation Functions", func() {
 
 				// Check volume mounts
 				volumeMounts := container.VolumeMounts
-				Expect(volumeMounts).To(HaveLen(1))
+				Expect(volumeMounts).To(HaveLen(2))
 				Expect(volumeMounts[0].Name).To(Equal("ncs-config"))
 				Expect(volumeMounts[0].MountPath).To(Equal("/etc/ncs/ncs.conf"))
 				Expect(volumeMounts[0].SubPath).To(Equal("ncs.conf"))
+				Expect(volumeMounts[1].Name).To(Equal("cdb-storage"))
+				Expect(volumeMounts[1].MountPath).To(Equal("/nso/run/cdb"))
 
 				// Check volumes
 				volumes := podTemplate.Spec.Volumes
-				Expect(volumes).To(HaveLen(1))
+				Expect(volumes).To(HaveLen(2))
 				volume := volumes[0]
 				Expect(volume.Name).To(Equal("ncs-config"))
 				Expect(volume.ConfigMap).NotTo(BeNil())
@@ -203,8 +205,107 @@ var _ = Describe("Resource Creation Functions", func() {
 				Expect(volume.ConfigMap.Items[0].Path).To(Equal("ncs.conf"))
 				Expect(*volume.ConfigMap.Items[0].Mode).To(Equal(int32(0600)))
 
+				cdbVolume := volumes[1]
+				Expect(cdbVolume.Name).To(Equal("cdb-storage"))
+				Expect(cdbVolume.PersistentVolumeClaim).NotTo(BeNil())
+				Expect(cdbVolume.PersistentVolumeClaim.ClaimName).To(Equal("test-nso-statefulset-cdb"))
+
 				// Clean up
 				err = k8sClient.Delete(ctx, testNSO2)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("newCDBPersistentVolumeClaim", func() {
+			It("should create CDB PVC with default size", func() {
+				// Create a separate NSO for this test
+				testNSO3 := &orchestrationciscocomv1alpha1.NSO{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-nso-cdb",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.NSOSpec{
+						Image:       "test-nso:latest",
+						ServiceName: "test-nso-service",
+						Replicas:    1,
+						LabelSelector: map[string]string{
+							"app": "nso-test",
+						},
+						Ports: []corev1.ServicePort{
+							{
+								Name: "http",
+								Port: 8080,
+							},
+							{
+								Name: "https",
+								Port: 8888,
+							},
+						},
+						NsoConfigRef: "test-nso-config",
+						AdminCredentials: orchestrationciscocomv1alpha1.Credentials{
+							Username:          "admin",
+							PasswordSecretRef: "test-admin-secret",
+						},
+					},
+				}
+
+				err := k8sClient.Create(ctx, testNSO3)
+				Expect(err).NotTo(HaveOccurred())
+
+				pvc := nsoReconciler.newCDBPersistentVolumeClaim(ctx, testNSO3)
+
+				Expect(pvc.Name).To(Equal("test-nso-cdb-cdb"))
+				Expect(pvc.Namespace).To(Equal("default"))
+				Expect(pvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("5Gi")))
+				Expect(pvc.Spec.AccessModes).To(ContainElement(corev1.ReadWriteOnce))
+
+				// Clean up
+				err = k8sClient.Delete(ctx, testNSO3)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should create CDB PVC with custom size", func() {
+				// Create NSO with custom CDB size
+				testNSO4 := &orchestrationciscocomv1alpha1.NSO{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-nso-cdb-custom",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.NSOSpec{
+						Image:          "test-nso:latest",
+						ServiceName:    "test-nso-service",
+						Replicas:       1,
+						CDBStorageSize: "10Gi",
+						LabelSelector: map[string]string{
+							"app": "nso-test",
+						},
+						Ports: []corev1.ServicePort{
+							{
+								Name: "http",
+								Port: 8080,
+							},
+							{
+								Name: "https",
+								Port: 8888,
+							},
+						},
+						NsoConfigRef: "test-nso-config",
+						AdminCredentials: orchestrationciscocomv1alpha1.Credentials{
+							Username:          "admin",
+							PasswordSecretRef: "test-admin-secret",
+						},
+					},
+				}
+
+				err := k8sClient.Create(ctx, testNSO4)
+				Expect(err).NotTo(HaveOccurred())
+
+				pvc := nsoReconciler.newCDBPersistentVolumeClaim(ctx, testNSO4)
+
+				Expect(pvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("10Gi")))
+
+				// Clean up
+				err = k8sClient.Delete(ctx, testNSO4)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})

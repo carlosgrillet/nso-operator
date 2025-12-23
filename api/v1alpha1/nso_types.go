@@ -67,6 +67,10 @@ type NSOSpec struct {
 	// +kubebuilder:validation:Optional
 	// NSO volumes.
 	Volumes []corev1.Volume `json:"volumes"`
+
+	// +kubebuilder:validation:Optional
+	// Storage size for the CDB (Configuration Database) persistent volume. Default: 5Gi if not specified.
+	CDBStorageSize string `json:"cdbStorageSize,omitempty"`
 }
 
 // Credentials for admin user.

@@ -31,6 +31,37 @@ import (
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
+func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.PersistentVolumeClaim {
+	log := logf.FromContext(ctx)
+	defaultSize := "5Gi"
+	if nso.Spec.CDBStorageSize != "" {
+		defaultSize = nso.Spec.CDBStorageSize
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-cdb", nso.Name),
+			Namespace: nso.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(defaultSize),
+				},
+			},
+		},
+	}
+	err := controllerutil.SetControllerReference(nso, pvc, r.Scheme)
+	if err != nil {
+		log.Error(err, "Failed to set controller reference for CDB PVC")
+		return &corev1.PersistentVolumeClaim{}
+	}
+	return pvc
+}
+
 // Create a new Headless Service for NSO StatefulSet
 func (r *NSOReconciler) newService(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.Service {
 	log := logf.FromContext(ctx)
@@ -104,6 +135,9 @@ func (r *NSOReconciler) newStatefulSet(ctx context.Context, nso *nsov1alpha1.NSO
 							Name:      "ncs-config",
 							MountPath: "/etc/ncs/ncs.conf",
 							SubPath:   "ncs.conf",
+						}, {
+							Name:      "cdb-storage",
+							MountPath: "/nso/run/cdb",
 						}}, nso.Spec.VolumeMounts...),
 					}},
 					Volumes: append([]corev1.Volume{{
@@ -118,6 +152,13 @@ func (r *NSOReconciler) newStatefulSet(ctx context.Context, nso *nsov1alpha1.NSO
 									Path: "ncs.conf",
 									Mode: &ncsConfigFileMode,
 								}},
+							},
+						},
+					}, {
+						Name: "cdb-storage",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: fmt.Sprintf("%s-cdb", nso.Name),
 							},
 						},
 					}}, nso.Spec.Volumes...),
