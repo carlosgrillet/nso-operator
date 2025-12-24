@@ -205,6 +205,7 @@ func main() {
 	if err := (&controller.NSOReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: mgr.GetConfig(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NSO")
 		os.Exit(1)
@@ -212,6 +213,7 @@ func main() {
 	if err := (&controller.PackageBundleReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: mgr.GetConfig(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PackageBundle")
 		os.Exit(1)
