@@ -28,7 +28,7 @@ const (
 	OriginTypeURL OriginType = "URL"
 )
 
-// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload;Loaded
+// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload;Loading;Loaded
 type PackageBundlePhase string
 
 const (
@@ -37,6 +37,7 @@ const (
 	PackageBundlePhaseDownloading       PackageBundlePhase = "Downloading"
 	PackageBundlePhaseDownloaded        PackageBundlePhase = "Downloaded"
 	PackageBundlePhaseFailedToDownload  PackageBundlePhase = "FailedToDownload"
+	PackageBundlePhaseLoading           PackageBundlePhase = "Loading"
 	PackageBundlePhaseLoaded            PackageBundlePhase = "Loaded"
 )
 
