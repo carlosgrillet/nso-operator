@@ -18,13 +18,15 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,10 +34,37 @@ import (
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
+const (
+	// Reconciliation requeue intervals
+	requeueIntervalMountRetry = 15 * time.Second
+	requeueIntervalJobStatus  = 30 * time.Second
+
+	// NSO container and command configuration
+	nsoContainerName        = "ncs"
+	nsoCliCommand           = "ncs_cli"
+	nsoCliUserFlag          = "-Cu"
+	nsoPackageReloadCommand = "packages reload"
+	nsoPackagesMountPath    = "/nso/run/packages"
+
+	// Volume and storage configuration
+	defaultStorageSize   = "1Gi"
+	packageVolumeNameFmt = "package-%s"
+	downloadJobNameFmt   = "download-%s"
+	jobVolumeName        = "package-storage"
+	jobVolumeMountPath   = "/repo"
+)
+
+// Sentinel errors for control flow
+var (
+	ErrNSOPodRestarting = fmt.Errorf("NSO pod is restarting after volume mount")
+	ErrNSOPodNotReady   = fmt.Errorf("NSO pod not ready yet")
+)
+
 // PackageBundleReconciler reconciles a PackageBundle object
 type PackageBundleReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *rest.Config
 }
 
 // +kubebuilder:rbac:groups=orchestration.cisco.com,resources=packagebundles,verbs=get;list;watch;create;update;patch;delete
@@ -44,6 +73,8 @@ type PackageBundleReconciler struct {
 // +kubebuilder:rbac:groups=orchestration.cisco.com,resources=nsoes,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -61,7 +92,7 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	packageBundle := &nsov1alpha1.PackageBundle{}
 	err := r.Get(ctx, req.NamespacedName, packageBundle)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			log.Info("PackageBundle resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
@@ -82,17 +113,24 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	// If downloaded, proceed to mount the PVC
-	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded {
+	// If downloaded OR loading, proceed to mount the PVC and reload packages
+	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded ||
+		packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseLoading {
 		if err := r.mountPVCToNSO(ctx, packageBundle); err != nil {
-			log.Error(err, "Failed to mount PVC to NSO instance")
-			return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			// Check for sentinel errors that indicate expected retry conditions
+			if errors.Is(err, ErrNSOPodRestarting) || errors.Is(err, ErrNSOPodNotReady) {
+				log.Info("NSO pod not ready, will retry", "error", err)
+				return ctrl.Result{RequeueAfter: requeueIntervalMountRetry}, nil
+			}
+			// Actual errors should be returned
+			log.Error(err, "Failed to mount PVC or reload packages in NSO instance")
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
 	// Create PVC
-	pvc := r.newPersistenVolumeClaim(ctx, packageBundle)
+	pvc := r.newPersistentVolumeClaim(ctx, packageBundle)
 	requeue, err := ensureObjectExists(ctx, r.Client, pvc)
 	if err != nil {
 		if updateErr := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseFailedToDownload, fmt.Sprintf("Failed to create PVC: %v", err), ""); updateErr != nil {
@@ -126,7 +164,7 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	phase, message, err := getJobStatus(ctx, r.Client, jobName, packageBundle.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to get Job status", "job", jobName)
-		return ctrl.Result{RequeueAfter: time.Second * 30}, err
+		return ctrl.Result{RequeueAfter: requeueIntervalJobStatus}, err
 	}
 
 	// Update PackageBundle status based on Job status
@@ -137,7 +175,7 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Requeue if the job is still running or pending
 	if phase == nsov1alpha1.PackageBundlePhaseContainerCreating || phase == nsov1alpha1.PackageBundlePhaseDownloading {
-		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+		return ctrl.Result{RequeueAfter: requeueIntervalJobStatus}, nil
 	}
 
 	// If job succeeded, the phase will be Downloaded and on next reconcile the PVC will be mounted
@@ -155,7 +193,7 @@ func (r *PackageBundleReconciler) mountPVCToNSO(ctx context.Context, packageBund
 		Namespace: packageBundle.Namespace,
 	}, nso)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			log.Error(err, "NSO instance not found", "targetName", packageBundle.Spec.TargetName)
 			return fmt.Errorf("NSO instance %s not found: %w", packageBundle.Spec.TargetName, err)
 		}
@@ -163,9 +201,9 @@ func (r *PackageBundleReconciler) mountPVCToNSO(ctx context.Context, packageBund
 	}
 
 	// Prepare the PVC name and volume name
-	pvcName := fmt.Sprintf("%s-%s", packageBundle.Name, packageBundle.Spec.TargetName)
-	volumeName := fmt.Sprintf("package-%s", packageBundle.Name)
-	mountPath := "/nso/run/packages"
+	pvcName := generatePVCName(packageBundle.Name, packageBundle.Spec.TargetName)
+	volumeName := generatePackageVolumeName(packageBundle.Name)
+	mountPath := nsoPackagesMountPath
 	packagesFolder := normalizePathString(packageBundle.Spec.Source.Path)
 
 	// Check if volume is already mounted
@@ -198,25 +236,99 @@ func (r *PackageBundleReconciler) mountPVCToNSO(ctx context.Context, packageBund
 			SubPath:   packagesFolder,
 		})
 
-		// Update the NSO instance
+		// Update the NSO instance - THIS TRIGGERS POD RESTART
 		if err := r.Update(ctx, nso); err != nil {
 			log.Error(err, "Failed to update NSO instance with PVC mount")
 			return err
 		}
 
-		log.Info("Successfully mounted PVC to NSO instance", "nso", nso.Name, "pvc", pvcName, "mountPath", mountPath)
-	} else {
-		log.Info("PVC already mounted to NSO instance", "nso", nso.Name, "pvc", pvcName)
+		log.Info("Successfully mounted PVC to NSO instance - pod will restart", "nso", nso.Name, "pvc", pvcName)
+
+		// Update status to Loading - volume is mounted, now wait for pod restart
+		if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseLoading,
+			fmt.Sprintf("Volume mounted to NSO instance %s, waiting for pod restart", nso.Name),
+			packageBundle.Status.JobName); err != nil {
+			log.Error(err, "Failed to update PackageBundle status to Loading")
+			return err
+		}
+
+		// Return sentinel error to trigger requeue
+		return ErrNSOPodRestarting
 	}
 
-	// Update PackageBundle status to Loaded
+	// Volume already exists - pod should be ready, proceed to reload packages
+	log.Info("Volume already mounted, proceeding to reload packages", "nso", nso.Name)
+
+	// Find the ready NSO pod
+	podName, err := findReadyPodByLabels(ctx, r.Client, packageBundle.Namespace, nso.Spec.LabelSelector)
+	if err != nil {
+		log.Error(err, "Failed to find NSO pod", "labels", nso.Spec.LabelSelector)
+		return err
+	}
+
+	if podName == "" {
+		log.Info("NSO pod not ready yet, will retry", "labels", nso.Spec.LabelSelector)
+		// Update status to Loading if not already
+		if packageBundle.Status.Phase != nsov1alpha1.PackageBundlePhaseLoading {
+			if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseLoading,
+				"Waiting for NSO pod to be ready",
+				packageBundle.Status.JobName); err != nil {
+				log.Error(err, "Failed to update PackageBundle status to Loading")
+			}
+		}
+		return ErrNSOPodNotReady
+	}
+
+	// Execute packages reload command
+	log.Info("Executing package reload command", "pod", podName, "namespace", packageBundle.Namespace)
+
+	executor, err := newPodExecutor(r.Config)
+	if err != nil {
+		log.Error(err, "Failed to create pod executor")
+		return err
+	}
+
+	adminUsername := nso.Spec.AdminCredentials.Username
+	command := []string{nsoCliCommand, nsoCliUserFlag, adminUsername}
+	stdin := nsoPackageReloadCommand
+	containerName := nsoContainerName
+
+	stdout, stderr, err := executor.ExecCommandInPod(
+		ctx,
+		packageBundle.Namespace,
+		podName,
+		containerName,
+		command,
+		stdin,
+	)
+
+	// Log output regardless of success/failure
+	log.Info("Package reload command output",
+		"pod", podName,
+		"stdout", stdout,
+		"stderr", stderr,
+		"error", err)
+
+	if err != nil {
+		// Update status to indicate failure
+		failureMsg := fmt.Sprintf("Failed to reload packages in NSO pod %s: %v. Stderr: %s", podName, err, stderr)
+		if updateErr := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseLoading,
+			failureMsg,
+			packageBundle.Status.JobName); updateErr != nil {
+			log.Error(updateErr, "Failed to update PackageBundle status after command failure")
+		}
+		return fmt.Errorf("%s", failureMsg)
+	}
+
+	// Success! Update status to Loaded
 	if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhaseLoaded,
-		fmt.Sprintf("Package successfully loaded to NSO instance %s at %s", nso.Name, mountPath),
+		fmt.Sprintf("Package successfully loaded to NSO instance %s. Output: %s", nso.Name, stdout),
 		packageBundle.Status.JobName); err != nil {
 		log.Error(err, "Failed to update PackageBundle status to Loaded")
 		return err
 	}
 
+	log.Info("Successfully reloaded packages in NSO", "pod", podName)
 	return nil
 }
 

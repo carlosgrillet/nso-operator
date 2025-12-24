@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,13 +12,66 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
+
+// PodExecutor handles command execution in pods
+type PodExecutor struct {
+	clientset *kubernetes.Clientset
+	config    *rest.Config
+}
+
+// NewPodExecutor creates an executor from the in-cluster config
+func newPodExecutor(config *rest.Config) (*PodExecutor, error) {
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return &PodExecutor{clientset: clientset, config: config}, nil
+}
+
+// ExecInPod runs a command in a container and returns stdout/stderr
+func (e *PodExecutor) ExecCommandInPod(ctx context.Context, namespace, podName, container string, command []string, stdin string) (string, string, error) {
+	podExecOptions := &corev1.PodExecOptions{
+		Container: container,
+		Command:   command,
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       false,
+	}
+
+	req := e.clientset.CoreV1().RESTClient().
+		Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(namespace).
+		SubResource("exec").
+		VersionedParams(podExecOptions, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(e.config, "POST", req.URL())
+	if err != nil {
+		return "", "", err
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin:  strings.NewReader(stdin),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	return stdout.String(), stderr.String(), err
+}
 
 // Function to safely verify if the resource is created or not before reconcile
 func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
@@ -54,7 +109,6 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 	log.Info("Resource exists, updating to match desired state")
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	err = c.Update(ctx, obj)
-
 	if err != nil {
 		log.Error(err, "Failed to update resource")
 		return false, err
@@ -193,4 +247,70 @@ func getJobStatus(ctx context.Context, c client.Client, jobName, namespace strin
 func normalizePathString(path string) string {
 	path = strings.TrimSpace(path)
 	return strings.Trim(path, "/")
+}
+
+// findReadyPodByLabels finds a ready pod matching the given label selector
+// Returns the pod name if found and ready, empty string if not found or not ready, and error for API failures
+func findReadyPodByLabels(ctx context.Context, c client.Client, namespace string, labels map[string]string) (string, error) {
+	log := logf.FromContext(ctx)
+
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	}
+
+	if err := c.List(ctx, podList, listOpts...); err != nil {
+		log.Error(err, "Failed to list pods", "namespace", namespace, "labels", labels)
+		return "", err
+	}
+
+	if len(podList.Items) == 0 {
+		log.Info("No pods found matching labels", "namespace", namespace, "labels", labels)
+		return "", nil
+	}
+
+	// Find first pod that is Running and Ready
+	for _, pod := range podList.Items {
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		// Check if all containers are ready
+		allReady := true
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodReady {
+				if condition.Status != corev1.ConditionTrue {
+					allReady = false
+				}
+				break
+			}
+		}
+
+		if allReady {
+			log.Info("Found ready pod", "podName", pod.Name, "namespace", namespace)
+			return pod.Name, nil
+		}
+	}
+
+	log.Info("Found pods but none are ready yet", "namespace", namespace, "labels", labels, "podCount", len(podList.Items))
+	return "", nil
+}
+
+// generatePVCName creates a consistent PVC name for a PackageBundle
+// Format: {bundleName}-{targetName}
+func generatePVCName(bundleName, targetName string) string {
+	return fmt.Sprintf("%s-%s", bundleName, targetName)
+}
+
+// generatePackageVolumeName creates a consistent volume name for a PackageBundle
+// Format: package-{bundleName}
+func generatePackageVolumeName(bundleName string) string {
+	return fmt.Sprintf(packageVolumeNameFmt, bundleName)
+}
+
+// generateDownloadJobName creates a consistent job name for a PackageBundle
+// Format: download-{bundleName}
+func generateDownloadJobName(bundleName string) string {
+	return fmt.Sprintf(downloadJobNameFmt, bundleName)
 }

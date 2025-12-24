@@ -176,10 +176,10 @@ func (r *NSOReconciler) newStatefulSet(ctx context.Context, nso *nsov1alpha1.NSO
 }
 
 // Create a new PVC to store the downloaded packages
-func (r *PackageBundleReconciler) newPersistenVolumeClaim(ctx context.Context, pb *nsov1alpha1.PackageBundle) *corev1.PersistentVolumeClaim {
+func (r *PackageBundleReconciler) newPersistentVolumeClaim(ctx context.Context, pb *nsov1alpha1.PackageBundle) *corev1.PersistentVolumeClaim {
 	log := logf.FromContext(ctx)
-	pvcName := fmt.Sprintf("%s-%s", pb.Name, pb.Spec.TargetName)
-	size := resource.MustParse("1Gi")
+	pvcName := generatePVCName(pb.Name, pb.Spec.TargetName)
+	size := resource.MustParse(defaultStorageSize)
 	if pb.Spec.StorageSize != "" {
 		size = resource.MustParse(pb.Spec.StorageSize)
 	}
@@ -211,10 +211,10 @@ func (r *PackageBundleReconciler) newPersistenVolumeClaim(ctx context.Context, p
 // Create a new Job to download the NSO packages
 func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.PackageBundle) *batchv1.Job {
 	log := logf.FromContext(ctx)
-	pvcName := fmt.Sprintf("%s-%s", pb.Name, pb.Spec.TargetName)
-	jobName := fmt.Sprintf("download-%s", pb.Name)
-	volumeName := "package-storage"
-	volumeMountPath := "/repo"
+	pvcName := generatePVCName(pb.Name, pb.Spec.TargetName)
+	jobName := generateDownloadJobName(pb.Name)
+	volumeName := jobVolumeName
+	volumeMountPath := jobVolumeMountPath
 	packagesPath := normalizePathString(pb.Spec.Source.Path)
 	var ttlSecondsAfterFinished int32 = 300
 	var backoffLimit int32 = 3
