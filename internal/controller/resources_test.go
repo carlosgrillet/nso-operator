@@ -340,13 +340,13 @@ var _ = Describe("Resource Creation Functions", func() {
 			}
 		})
 
-		Describe("newPersistenVolumeClaim", func() {
+		Describe("newPersistentVolumeClaim", func() {
 			It("should create a PVC with correct specifications", func() {
 				// Create PackageBundle for PVC test
 				err := k8sClient.Create(ctx, testPackageBundle)
 				Expect(err).NotTo(HaveOccurred())
 
-				pvc := packageBundleReconciler.newPersistenVolumeClaim(ctx, testPackageBundle)
+				pvc := packageBundleReconciler.newPersistentVolumeClaim(ctx, testPackageBundle)
 
 				expectedName := "test-pb-resources-test-nso"
 				Expect(pvc.Name).To(Equal(expectedName))
@@ -380,7 +380,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				err := k8sClient.Create(ctx, testPB2)
 				Expect(err).NotTo(HaveOccurred())
 
-				pvc := packageBundleReconciler.newPersistenVolumeClaim(ctx, testPB2)
+				pvc := packageBundleReconciler.newPersistentVolumeClaim(ctx, testPB2)
 
 				expectedSize := resource.MustParse("1Gi")
 				Expect(pvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(expectedSize))
