@@ -17,3 +17,9 @@ spec:
     url: https://github.com/cassandrabarreto/nso-operator-packages.git
     branch: main
     path: packages
+  config:
+    download:
+      image: "alpine/git"
+    build:
+      image: "carlosgrillet/cisco-nso:6.1.19-build"
+
