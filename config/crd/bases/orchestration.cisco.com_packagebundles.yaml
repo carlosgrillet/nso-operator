@@ -51,6 +51,31 @@ spec:
           spec:
             description: spec defines the desired state of PackageBundle
             properties:
+              config:
+                description: Configuration for the packagebundle download and build
+                properties:
+                  build:
+                    description: Configuration used to build the packages.
+                    properties:
+                      image:
+                        description: Container image name.
+                        type: string
+                    required:
+                    - image
+                    type: object
+                  download:
+                    description: Configuration used to download the packages.
+                    properties:
+                      image:
+                        description: Container image name.
+                        type: string
+                    required:
+                    - image
+                    type: object
+                required:
+                - build
+                - download
+                type: object
               credentials:
                 description: Credentials used for WEB or SSH connections.
                 properties:
@@ -72,10 +97,10 @@ spec:
                 - URL
                 type: string
               source:
-                description: Credentials used for WEB or SSH connections.
+                description: Source where to download the packages.
                 properties:
                   branch:
-                    description: URL of the repository or WEB where the packages are.
+                    description: Git branch used to pull the packages.
                     type: string
                   path:
                     description: Path in the repository where the packages are.
@@ -94,6 +119,7 @@ spec:
                   to be loaded.
                 type: string
             required:
+            - config
             - origin
             - source
             - targetName

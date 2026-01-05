@@ -59,6 +59,10 @@ spec:
                 - passwordSecretRef
                 - username
                 type: object
+              cdbStorageSize:
+                description: 'Storage size for the CDB (Configuration Database) persistent
+                  volume. Default: 5Gi if not specified.'
+                type: string
               env:
                 description: NSO environment variables.
                 items:
