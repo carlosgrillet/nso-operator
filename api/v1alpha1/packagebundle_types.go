@@ -52,9 +52,6 @@ type PackageBundleSpec struct {
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
 	// +kubebuilder:validation:Required
-	// Container image name.
-
-	// +kubebuilder:validation:Required
 	// Name of the NSO instance where the packages are going to be loaded.
 	TargetName string `json:"targetName"`
 
