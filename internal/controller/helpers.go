@@ -105,12 +105,25 @@ func ensureObjectExists(ctx context.Context, c client.Client, obj client.Object)
 		return false, nil
 	}
 
-	// Resource exists - update it with the NEW desired state
+	// Resource exists - update it with the NEW desired state using retry logic
 	log.Info("Resource exists, updating to match desired state")
-	obj.SetResourceVersion(existing.GetResourceVersion())
-	err = c.Update(ctx, obj)
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Re-fetch the latest version to avoid conflicts
+		latest := obj.DeepCopyObject().(client.Object)
+		if err := c.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, latest); err != nil {
+			return err
+		}
+
+		// Update the resource version and other metadata from the latest version
+		obj.SetResourceVersion(latest.GetResourceVersion())
+		obj.SetUID(latest.GetUID())
+
+		// Attempt the update
+		return c.Update(ctx, obj)
+	})
+
 	if err != nil {
-		log.Error(err, "Failed to update resource")
+		log.Error(err, "Failed to update resource after retries")
 		return false, err
 	}
 
@@ -165,15 +178,19 @@ func (r *NSOReconciler) watchForResourceChange(ctx context.Context, resource cli
 func updatePackageBundlePhase(ctx context.Context, c client.Client, packageBundle *nsov1alpha1.PackageBundle, newPhase nsov1alpha1.PackageBundlePhase, message string, jobName string) error {
 	log := logf.FromContext(ctx)
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the latest version of the PackageBundle to avoid conflicts
 		latest := &nsov1alpha1.PackageBundle{}
 		if err := c.Get(ctx, types.NamespacedName{Name: packageBundle.Name, Namespace: packageBundle.Namespace}, latest); err != nil {
 			return err
 		}
 
-		// Only update if phase has changed
-		if latest.Status.Phase == newPhase {
+		// Only update if status has actually changed
+		// Check phase, message, and jobName to avoid unnecessary updates
+		if latest.Status.Phase == newPhase &&
+			latest.Status.Message == message &&
+			latest.Status.JobName == jobName {
+			log.V(1).Info("Status unchanged, skipping update", "name", packageBundle.Name, "phase", newPhase)
 			return nil
 		}
 
@@ -185,14 +202,16 @@ func updatePackageBundlePhase(ctx context.Context, c client.Client, packageBundl
 		latest.Status.LastTransitionTime = &now
 
 		// Update the status subresource
-		if err := c.Status().Update(ctx, latest); err != nil {
-			log.Error(err, "Failed to update PackageBundle status", "phase", newPhase, "message", message)
-			return err
-		}
-
-		log.Info("Updated PackageBundle phase", "name", packageBundle.Name, "phase", newPhase, "message", message)
-		return nil
+		return c.Status().Update(ctx, latest)
 	})
+
+	if err != nil {
+		log.Error(err, "Failed to update PackageBundle status after retries", "phase", newPhase, "message", message)
+		return err
+	}
+
+	log.Info("Updated PackageBundle phase", "name", packageBundle.Name, "phase", newPhase, "message", message)
+	return nil
 }
 
 // Checks the Job status and returns the corresponding PackageBundle phase and message

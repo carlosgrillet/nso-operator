@@ -27,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -219,26 +220,51 @@ func (r *PackageBundleReconciler) mountPVCToNSO(ctx context.Context, packageBund
 	if !volumeExists {
 		log.Info("Adding PVC volume to NSO instance", "nso", nso.Name, "pvc", pvcName)
 
-		// Add the volume
-		nso.Spec.Volumes = append(nso.Spec.Volumes, corev1.Volume{
+		// Prepare the volume and volume mount to add
+		newVolume := corev1.Volume{
 			Name: volumeName,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: pvcName,
 				},
 			},
-		})
+		}
 
-		// Add the volume mount to the NSO container
-		nso.Spec.VolumeMounts = append(nso.Spec.VolumeMounts, corev1.VolumeMount{
+		newVolumeMount := corev1.VolumeMount{
 			Name:      volumeName,
 			MountPath: mountPath,
 			SubPath:   packagesFolder,
+		}
+
+		// Update the NSO instance with retry logic - THIS TRIGGERS POD RESTART
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			// Re-fetch the latest NSO to avoid conflicts
+			latestNSO := &nsov1alpha1.NSO{}
+			if err := r.Get(ctx, client.ObjectKey{
+				Name:      packageBundle.Spec.TargetName,
+				Namespace: packageBundle.Namespace,
+			}, latestNSO); err != nil {
+				return err
+			}
+
+			// Check again if volume already exists (it might have been added by another reconcile)
+			for _, vol := range latestNSO.Spec.Volumes {
+				if vol.Name == volumeName {
+					log.Info("Volume already exists in latest NSO, skipping update")
+					return nil
+				}
+			}
+
+			// Add the volume and volume mount
+			latestNSO.Spec.Volumes = append(latestNSO.Spec.Volumes, newVolume)
+			latestNSO.Spec.VolumeMounts = append(latestNSO.Spec.VolumeMounts, newVolumeMount)
+
+			// Update the NSO instance
+			return r.Update(ctx, latestNSO)
 		})
 
-		// Update the NSO instance - THIS TRIGGERS POD RESTART
-		if err := r.Update(ctx, nso); err != nil {
-			log.Error(err, "Failed to update NSO instance with PVC mount")
+		if err != nil {
+			log.Error(err, "Failed to update NSO instance with PVC mount after retries")
 			return err
 		}
 
