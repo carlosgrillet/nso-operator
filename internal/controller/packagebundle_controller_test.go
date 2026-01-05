@@ -60,6 +60,14 @@ var _ = Describe("PackageBundle Controller", func() {
 						Source: orchestrationciscocomv1alpha1.PackageSource{
 							Url: "https://github.com/example/test-repo.git",
 						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

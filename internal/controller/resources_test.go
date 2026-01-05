@@ -336,6 +336,14 @@ var _ = Describe("Resource Creation Functions", func() {
 						Branch: "main",
 						Path:   "packages",
 					},
+					Config: orchestrationciscocomv1alpha1.PackageConfig{
+						Download: orchestrationciscocomv1alpha1.ContainerParams{
+							Image: "alpine/git",
+						},
+						Build: orchestrationciscocomv1alpha1.ContainerParams{
+							Image: "carlosgrillet/cisco-nso:6.1.19-build",
+						},
+					},
 				},
 			}
 		})
@@ -374,6 +382,14 @@ var _ = Describe("Resource Creation Functions", func() {
 						Origin:     orchestrationciscocomv1alpha1.OriginTypeSCM,
 						Source: orchestrationciscocomv1alpha1.PackageSource{
 							Url: "https://github.com/example/test-repo.git",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
 						},
 					},
 				}
@@ -418,7 +434,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				Expect(initContainers).To(HaveLen(1))
 
 				initContainer := initContainers[0]
-				Expect(initContainer.Name).To(Equal("downloader"))
+				Expect(initContainer.Name).To(Equal("test-pb-resources-downloader"))
 				Expect(initContainer.Image).To(Equal("alpine/git"))
 				Expect(initContainer.Command).To(Equal([]string{"git", "clone", "--depth", "1", "https://github.com/example/test-repo.git", "/repo"}))
 
@@ -439,7 +455,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				Expect(containers).To(HaveLen(1))
 
 				container := containers[0]
-				Expect(container.Name).To(Equal("builder"))
+				Expect(container.Name).To(Equal("test-pb-resources-builder"))
 				Expect(container.Image).To(Equal("carlosgrillet/cisco-nso:6.1.19-build"))
 				Expect(container.Command).To(Equal([]string{"/bin/sh", "-c"}))
 				Expect(container.Args).To(HaveLen(1))
@@ -479,6 +495,14 @@ var _ = Describe("Resource Creation Functions", func() {
 							Url:  "https://github.com/another/repo.git",
 							Path: "/my-packages",
 						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
+						},
 					},
 				}
 				err := k8sClient.Create(ctx, differentPB)
@@ -494,7 +518,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				// Check main container exists and uses the correct path
 				Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 				container := job.Spec.Template.Spec.Containers[0]
-				Expect(container.Name).To(Equal("builder"))
+				Expect(container.Name).To(Equal("test-pb-different-builder"))
 				Expect(container.Args[0]).To(ContainSubstring("my-packages/*/src"))
 
 				// Clean up
