@@ -251,8 +251,8 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
 					InitContainers: []corev1.Container{{
-						Name:            "downloader",
-						Image:           "alpine/git",
+						Name:            fmt.Sprintf("%s-downloader", pb.Name),
+						Image:           pb.Spec.Config.Download.Image,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, volumeMountPath},
 						Resources:       resources,
@@ -263,8 +263,8 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 						}},
 					}},
 					Containers: []corev1.Container{{
-						Name:       "builder",
-						Image:      "carlosgrillet/cisco-nso:6.1.19-build",
+						Name:       fmt.Sprintf("%s-builder", pb.Name),
+						Image:      pb.Spec.Config.Build.Image,
 						Command:    []string{"/bin/sh", "-c"},
 						Args:       []string{fmt.Sprintf("for dir in %s/*/src; do echo \"$dir\"; cd \"$dir\" && make clean all; done", packagesPath)},
 						WorkingDir: volumeMountPath,
