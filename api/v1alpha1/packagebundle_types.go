@@ -75,8 +75,12 @@ type PackageBundleSpec struct {
 	Credentials AccessCredentials `json:"credentials,omitempty"`
 
 	// +kubebuilder:validation:Required
-	// Credentials used for WEB or SSH connections.
+	// Source where to download the packages.
 	Source PackageSource `json:"source"`
+
+	// +kubebuilder:validation:Required
+	// Configuration for the packagebundle download and build
+	Config PackageConfig `json:"config"`
 }
 
 type AccessCredentials struct {
@@ -95,12 +99,28 @@ type PackageSource struct {
 	Url string `json:"url"`
 
 	// +kubebuilder:validation:Optional
-	// URL of the repository or WEB where the packages are.
+	// Git branch used to pull the packages.
 	Branch string `json:"branch,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// Path in the repository where the packages are.
 	Path string `json:"path,omitempty"`
+}
+
+type PackageConfig struct {
+	// +kubebuilder:validation:Required
+	// Configuration used to download the packages.
+	Download ContainerParams `json:"download"`
+
+	// +kubebuilder:validation:Required
+	// Configuration used to build the packages.
+	Build ContainerParams `json:"build"`
+}
+
+type ContainerParams struct {
+	// +kubebuilder:validation:Required
+	// Container image name.
+	Image string `json:"image"`
 }
 
 // PackageBundleStatus defines the observed state of PackageBundle.
