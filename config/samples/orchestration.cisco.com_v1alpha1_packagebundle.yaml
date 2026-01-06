@@ -14,6 +14,12 @@ spec:
     sshKeySecretRef: ssh-keys
     httpAuthSecretRef: http-auth
   source:
-    url: https://github.com/carlosgrillet/http-echo.git
+    url: https://github.com/cassandrabarreto/nso-operator-packages.git
     branch: main
-    path: cmd/api
+    path: packages
+  config:
+    download:
+      image: "alpine/git"
+    build:
+      image: "carlosgrillet/cisco-nso:6.1.19-build"
+

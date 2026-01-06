@@ -6,9 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: nso-sample
 spec:
-  image: containers.cisco.com/cisco-nso/cisco-nso-prod:6.1.11
+  image: carlosgrillet/cisco-nso:6.1.19-prod
   serviceName: "nso-prod"
-  replicas: 2
+  replicas: 1
   labelSelector:
     app: "nso"
   ports:

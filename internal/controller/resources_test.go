@@ -336,17 +336,25 @@ var _ = Describe("Resource Creation Functions", func() {
 						Branch: "main",
 						Path:   "packages",
 					},
+					Config: orchestrationciscocomv1alpha1.PackageConfig{
+						Download: orchestrationciscocomv1alpha1.ContainerParams{
+							Image: "alpine/git",
+						},
+						Build: orchestrationciscocomv1alpha1.ContainerParams{
+							Image: "carlosgrillet/cisco-nso:6.1.19-build",
+						},
+					},
 				},
 			}
 		})
 
-		Describe("newPersistenVolumeClaim", func() {
+		Describe("newPersistentVolumeClaim", func() {
 			It("should create a PVC with correct specifications", func() {
 				// Create PackageBundle for PVC test
 				err := k8sClient.Create(ctx, testPackageBundle)
 				Expect(err).NotTo(HaveOccurred())
 
-				pvc := packageBundleReconciler.newPersistenVolumeClaim(ctx, testPackageBundle)
+				pvc := packageBundleReconciler.newPersistentVolumeClaim(ctx, testPackageBundle)
 
 				expectedName := "test-pb-resources-test-nso"
 				Expect(pvc.Name).To(Equal(expectedName))
@@ -375,12 +383,20 @@ var _ = Describe("Resource Creation Functions", func() {
 						Source: orchestrationciscocomv1alpha1.PackageSource{
 							Url: "https://github.com/example/test-repo.git",
 						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
+						},
 					},
 				}
 				err := k8sClient.Create(ctx, testPB2)
 				Expect(err).NotTo(HaveOccurred())
 
-				pvc := packageBundleReconciler.newPersistenVolumeClaim(ctx, testPB2)
+				pvc := packageBundleReconciler.newPersistentVolumeClaim(ctx, testPB2)
 
 				expectedSize := resource.MustParse("1Gi")
 				Expect(pvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(expectedSize))
@@ -413,24 +429,44 @@ var _ = Describe("Resource Creation Functions", func() {
 				podTemplate := job.Spec.Template
 				Expect(podTemplate.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
 
-				// Check containers
+				// Check init containers
+				initContainers := podTemplate.Spec.InitContainers
+				Expect(initContainers).To(HaveLen(1))
+
+				initContainer := initContainers[0]
+				Expect(initContainer.Name).To(Equal("test-pb-resources-downloader"))
+				Expect(initContainer.Image).To(Equal("alpine/git"))
+				Expect(initContainer.Command).To(Equal([]string{"git", "clone", "--depth", "1", "https://github.com/example/test-repo.git", "/repo"}))
+
+				// Check init container volume mounts
+				initVolumeMounts := initContainer.VolumeMounts
+				Expect(initVolumeMounts).To(HaveLen(1))
+				Expect(initVolumeMounts[0].Name).To(Equal("package-storage"))
+				Expect(initVolumeMounts[0].MountPath).To(Equal("/repo"))
+
+				// Check security context
+				Expect(initContainer.SecurityContext).NotTo(BeNil())
+				Expect(*initContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*initContainer.SecurityContext.RunAsUser).To(Equal(int64(1000)))
+				Expect(*initContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+
+				// Check main containers
 				containers := podTemplate.Spec.Containers
 				Expect(containers).To(HaveLen(1))
 
 				container := containers[0]
-				Expect(container.Name).To(Equal("downloader"))
-				Expect(container.Image).To(Equal("alpine/git"))
-				Expect(container.Command).To(Equal([]string{"/bin/sh"}))
-				Expect(container.Args).To(HaveLen(2))
-				Expect(container.Args[0]).To(Equal("-c"))
-				expectedCommand := "cd /packages && git clone https://github.com/example/test-repo.git"
-				Expect(container.Args[1]).To(Equal(expectedCommand))
+				Expect(container.Name).To(Equal("test-pb-resources-builder"))
+				Expect(container.Image).To(Equal("carlosgrillet/cisco-nso:6.1.19-build"))
+				Expect(container.Command).To(Equal([]string{"/bin/sh", "-c"}))
+				Expect(container.Args).To(HaveLen(1))
+				Expect(container.Args[0]).To(ContainSubstring("for dir in packages/*/src"))
+				Expect(container.WorkingDir).To(Equal("/repo"))
 
-				// Check volume mounts
+				// Check main container volume mounts
 				volumeMounts := container.VolumeMounts
 				Expect(volumeMounts).To(HaveLen(1))
 				Expect(volumeMounts[0].Name).To(Equal("package-storage"))
-				Expect(volumeMounts[0].MountPath).To(Equal("/packages"))
+				Expect(volumeMounts[0].MountPath).To(Equal("/repo"))
 
 				// Check volumes
 				volumes := podTemplate.Spec.Volumes
@@ -456,7 +492,16 @@ var _ = Describe("Resource Creation Functions", func() {
 						TargetName: "test-nso",
 						Origin:     orchestrationciscocomv1alpha1.OriginTypeSCM,
 						Source: orchestrationciscocomv1alpha1.PackageSource{
-							Url: "https://github.com/another/repo.git",
+							Url:  "https://github.com/another/repo.git",
+							Path: "/my-packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
 						},
 					},
 				}
@@ -465,15 +510,54 @@ var _ = Describe("Resource Creation Functions", func() {
 
 				job := packageBundleReconciler.newJob(ctx, differentPB)
 
+				// Check init container has correct command with the different URL
+				Expect(job.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+				Expect(initContainer.Command).To(Equal([]string{"git", "clone", "--depth", "1", "https://github.com/another/repo.git", "/repo"}))
+
+				// Check main container exists and uses the correct path
 				Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 				container := job.Spec.Template.Spec.Containers[0]
-				Expect(container.Args).To(HaveLen(2))
-				expectedCommand := "cd /packages && git clone https://github.com/another/repo.git"
-				Expect(container.Args[1]).To(Equal(expectedCommand))
+				Expect(container.Name).To(Equal("test-pb-different-builder"))
+				Expect(container.Args[0]).To(ContainSubstring("my-packages/*/src"))
 
 				// Clean up
 				err = k8sClient.Delete(ctx, differentPB)
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Context("Helper Functions", func() {
+		Describe("normalizePathString", func() {
+			It("should trim leading and trailing slashes", func() {
+				result := normalizePathString("/packages/")
+				Expect(result).To(Equal("packages"))
+			})
+
+			It("should trim whitespace", func() {
+				result := normalizePathString("  /packages/  ")
+				Expect(result).To(Equal("packages"))
+			})
+
+			It("should handle path without slashes", func() {
+				result := normalizePathString("packages")
+				Expect(result).To(Equal("packages"))
+			})
+
+			It("should handle nested paths", func() {
+				result := normalizePathString("/path/to/packages/")
+				Expect(result).To(Equal("path/to/packages"))
+			})
+
+			It("should handle empty string", func() {
+				result := normalizePathString("")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should handle just slashes", func() {
+				result := normalizePathString("///")
+				Expect(result).To(Equal(""))
 			})
 		})
 	})

@@ -60,6 +60,14 @@ var _ = Describe("PackageBundle Controller", func() {
 						Source: orchestrationciscocomv1alpha1.PackageSource{
 							Url: "https://github.com/example/test-repo.git",
 						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "carlosgrillet/cisco-nso:6.1.19-build",
+							},
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -118,7 +126,8 @@ var _ = Describe("PackageBundle Controller", func() {
 			job := &batchv1.Job{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: "default"}, job)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine/git"))
+			Expect(job.Spec.Template.Spec.InitContainers[0].Image).To(Equal("alpine/git"))
+			Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal("carlosgrillet/cisco-nso:6.1.19-build"))
 		})
 
 		It("should update status based on Job completion", func() {

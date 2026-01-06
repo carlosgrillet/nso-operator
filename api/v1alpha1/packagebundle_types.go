@@ -28,7 +28,7 @@ const (
 	OriginTypeURL OriginType = "URL"
 )
 
-// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload
+// +kubebuilder:validation:Enum=Pending;ContainerCreating;Downloading;Downloaded;FailedToDownload;Loading;Loaded
 type PackageBundlePhase string
 
 const (
@@ -37,6 +37,8 @@ const (
 	PackageBundlePhaseDownloading       PackageBundlePhase = "Downloading"
 	PackageBundlePhaseDownloaded        PackageBundlePhase = "Downloaded"
 	PackageBundlePhaseFailedToDownload  PackageBundlePhase = "FailedToDownload"
+	PackageBundlePhaseLoading           PackageBundlePhase = "Loading"
+	PackageBundlePhaseLoaded            PackageBundlePhase = "Loaded"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -48,9 +50,6 @@ type PackageBundleSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// +kubebuilder:validation:Required
-	// Container image name.
 
 	// +kubebuilder:validation:Required
 	// Name of the NSO instance where the packages are going to be loaded.
@@ -73,8 +72,12 @@ type PackageBundleSpec struct {
 	Credentials AccessCredentials `json:"credentials,omitempty"`
 
 	// +kubebuilder:validation:Required
-	// Credentials used for WEB or SSH connections.
+	// Source where to download the packages.
 	Source PackageSource `json:"source"`
+
+	// +kubebuilder:validation:Required
+	// Configuration for the packagebundle download and build
+	Config PackageConfig `json:"config"`
 }
 
 type AccessCredentials struct {
@@ -93,12 +96,28 @@ type PackageSource struct {
 	Url string `json:"url"`
 
 	// +kubebuilder:validation:Optional
-	// URL of the repository or WEB where the packages are.
+	// Git branch used to pull the packages.
 	Branch string `json:"branch,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// Path in the repository where the packages are.
 	Path string `json:"path,omitempty"`
+}
+
+type PackageConfig struct {
+	// +kubebuilder:validation:Required
+	// Configuration used to download the packages.
+	Download ContainerParams `json:"download"`
+
+	// +kubebuilder:validation:Required
+	// Configuration used to build the packages.
+	Build ContainerParams `json:"build"`
+}
+
+type ContainerParams struct {
+	// +kubebuilder:validation:Required
+	// Container image name.
+	Image string `json:"image"`
 }
 
 // PackageBundleStatus defines the observed state of PackageBundle.
