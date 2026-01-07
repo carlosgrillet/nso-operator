@@ -1,0 +1,30 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: nso-operator
+
+build:
+  local:
+    push: false
+    concurrency: 0
+  tagPolicy:
+    gitCommit:
+      variant: "AbbrevCommitSha"
+  hooks:
+    before:
+      - command: ["make", "lint"]
+      - command: ["make", "test"]
+
+manifests:
+  kustomize:
+    paths:
+    - "./config/crd"
+    - "./config/default"
+    - "./config/samples"
+
+deploy:
+  kubectl:
+    hooks:
+      before:
+      - host:
+          command: ["./hack/load-images.sh"]
