@@ -194,12 +194,18 @@ func updatePackageBundlePhase(ctx context.Context, c client.Client, packageBundl
 			return nil
 		}
 
+		// Check if phase is actually changing (for LastTransitionTime)
+		phaseChanged := latest.Status.Phase != newPhase
+
 		// Update status fields
-		now := metav1.NewTime(time.Now())
 		latest.Status.Phase = newPhase
 		latest.Status.Message = message
 		latest.Status.JobName = jobName
-		latest.Status.LastTransitionTime = &now
+
+		if phaseChanged {
+			now := metav1.NewTime(time.Now())
+			latest.Status.LastTransitionTime = &now
+		}
 
 		// Update the status subresource
 		return c.Status().Update(ctx, latest)

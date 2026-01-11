@@ -422,7 +422,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				Expect(job.Namespace).To(Equal("default"))
 
 				// Check job specifications
-				Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(300)))
+				Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(1800)))
 				Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
 
 				// Check pod template
