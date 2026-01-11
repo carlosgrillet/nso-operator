@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -219,6 +220,9 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	var ttlSecondsAfterFinished int32 = 300
 	var backoffLimit int32 = 3
 
+	// Determine if we're using SSH (git@ URL) vs HTTPS
+	isSSH := strings.HasPrefix(pb.Spec.Source.Url, "git@")
+
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		RunAsUser:                ptr.To(int64(1000)),
@@ -228,7 +232,7 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 		},
 	}
 
-	if pb.Spec.Credentials.SshKeySecretRef != "" {
+	if isSSH {
 		securityContext = &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.To(false),
 			Capabilities: &corev1.Capabilities{
@@ -271,7 +275,9 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 
 	var initEnv []corev1.EnvVar
 	var podSecurityContext *corev1.PodSecurityContext
-	if pb.Spec.Credentials.SshKeySecretRef != "" {
+	
+	// Only mount SSH key if using SSH protocol (git@)
+	if isSSH && pb.Spec.Credentials.SshKeySecretRef != "" {
 		sshKeyMode := int32(0400) 
 		sshVolumeName := "ssh-key"
 		sshKeyPath := "/.ssh"
