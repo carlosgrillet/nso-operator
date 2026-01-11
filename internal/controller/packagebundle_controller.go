@@ -247,7 +247,6 @@ func (r *PackageBundleReconciler) unmountPVCFromNSO(ctx context.Context, package
 	log.Info("Removing PVC volume from NSO instance", "nso", nso.Name, "volume", volumeName)
 
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		
 		latestNSO := &nsov1alpha1.NSO{}
 		if err := r.Get(ctx, client.ObjectKey{
 			Name:      packageBundle.Spec.TargetName,
