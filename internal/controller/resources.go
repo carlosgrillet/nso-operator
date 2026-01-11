@@ -33,6 +33,12 @@ import (
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
 )
 
+const (
+	sshKeyFileMode  = int32(0400)
+	sshVolumeName   = "ssh-key"
+	sshKeyMountPath = "/.ssh"
+)
+
 func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.PersistentVolumeClaim {
 	log := logf.FromContext(ctx)
 	defaultSize := "5Gi"
@@ -258,7 +264,6 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	}
 	gitCloneCmd = append(gitCloneCmd, pb.Spec.Source.Url, volumeMountPath)
 
-
 	initVolumeMounts := []corev1.VolumeMount{{
 		Name:      volumeName,
 		MountPath: volumeMountPath,
@@ -275,41 +280,37 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 
 	var initEnv []corev1.EnvVar
 	var podSecurityContext *corev1.PodSecurityContext
-	
+
 	// Only mount SSH key if using SSH protocol (git@)
 	if isSSH && pb.Spec.Credentials.SshKeySecretRef != "" {
-		sshKeyMode := int32(0400) 
-		sshVolumeName := "ssh-key"
-		sshKeyPath := "/.ssh"
-
 		volumes = append(volumes, corev1.Volume{
 			Name: sshVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  pb.Spec.Credentials.SshKeySecretRef,
-					DefaultMode: &sshKeyMode,
+					DefaultMode: ptr.To(sshKeyFileMode),
 					Items: []corev1.KeyToPath{{
 						Key:  "id_rsa",
 						Path: "id_rsa",
-						Mode: &sshKeyMode,
+						Mode: ptr.To(sshKeyFileMode),
 					}},
 				},
 			},
 		})
 		initVolumeMounts = append(initVolumeMounts, corev1.VolumeMount{
 			Name:      sshVolumeName,
-			MountPath: sshKeyPath,
+			MountPath: sshKeyMountPath,
 			ReadOnly:  true,
 		})
 
 		initEnv = []corev1.EnvVar{
 			{
 				Name:  "HOME",
-				Value: "/tmp",  
+				Value: "/tmp",
 			},
 			{
 				Name:  "GIT_SSH_COMMAND",
-				Value: fmt.Sprintf("ssh -i %s/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshKeyPath),
+				Value: fmt.Sprintf("ssh -i %s/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshKeyMountPath),
 			},
 		}
 
@@ -326,18 +327,18 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 			BackoffLimit:            &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyNever,
-					SecurityContext:    podSecurityContext,
+					RestartPolicy:   corev1.RestartPolicyNever,
+					SecurityContext: podSecurityContext,
 					InitContainers: []corev1.Container{{
-					Name:            fmt.Sprintf("%s-downloader", pb.Name),
-					Image:           pb.Spec.Config.Download.Image,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         gitCloneCmd,
-					Env:             initEnv,
-					Resources:       resources,
-					SecurityContext: securityContext,
-					VolumeMounts:    initVolumeMounts,
-				}},
+						Name:            fmt.Sprintf("%s-downloader", pb.Name),
+						Image:           pb.Spec.Config.Download.Image,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         gitCloneCmd,
+						Env:             initEnv,
+						Resources:       resources,
+						SecurityContext: securityContext,
+						VolumeMounts:    initVolumeMounts,
+					}},
 					Containers: []corev1.Container{{
 						Name:       fmt.Sprintf("%s-builder", pb.Name),
 						Image:      pb.Spec.Config.Build.Image,
