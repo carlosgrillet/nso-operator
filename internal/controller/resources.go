@@ -228,6 +228,15 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 		},
 	}
 
+	if pb.Spec.Credentials.SshKeySecretRef != "" {
+		securityContext = &corev1.SecurityContext{
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		}
+	}
+
 	resources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -237,6 +246,68 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 			corev1.ResourceCPU:    resource.MustParse("1"),
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
+	}
+
+	gitCloneCmd := []string{"git", "clone", "--depth", "1"}
+	if pb.Spec.Source.Branch != "" {
+		gitCloneCmd = append(gitCloneCmd, "--branch", pb.Spec.Source.Branch)
+	}
+	gitCloneCmd = append(gitCloneCmd, pb.Spec.Source.Url, volumeMountPath)
+
+
+	initVolumeMounts := []corev1.VolumeMount{{
+		Name:      volumeName,
+		MountPath: volumeMountPath,
+	}}
+
+	volumes := []corev1.Volume{{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+			},
+		},
+	}}
+
+	var initEnv []corev1.EnvVar
+	var podSecurityContext *corev1.PodSecurityContext
+	if pb.Spec.Credentials.SshKeySecretRef != "" {
+		sshKeyMode := int32(0400) 
+		sshVolumeName := "ssh-key"
+		sshKeyPath := "/.ssh"
+
+		volumes = append(volumes, corev1.Volume{
+			Name: sshVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  pb.Spec.Credentials.SshKeySecretRef,
+					DefaultMode: &sshKeyMode,
+					Items: []corev1.KeyToPath{{
+						Key:  "id_rsa",
+						Path: "id_rsa",
+						Mode: &sshKeyMode,
+					}},
+				},
+			},
+		})
+		initVolumeMounts = append(initVolumeMounts, corev1.VolumeMount{
+			Name:      sshVolumeName,
+			MountPath: sshKeyPath,
+			ReadOnly:  true,
+		})
+
+		initEnv = []corev1.EnvVar{
+			{
+				Name:  "HOME",
+				Value: "/tmp",  
+			},
+			{
+				Name:  "GIT_SSH_COMMAND",
+				Value: fmt.Sprintf("ssh -i %s/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshKeyPath),
+			},
+		}
+
+		podSecurityContext = nil
 	}
 
 	job := &batchv1.Job{
@@ -249,19 +320,18 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 			BackoffLimit:            &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:      corev1.RestartPolicyNever,
+					SecurityContext:    podSecurityContext,
 					InitContainers: []corev1.Container{{
-						Name:            fmt.Sprintf("%s-downloader", pb.Name),
-						Image:           pb.Spec.Config.Download.Image,
-						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, volumeMountPath},
-						Resources:       resources,
-						SecurityContext: securityContext,
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      volumeName,
-							MountPath: volumeMountPath,
-						}},
-					}},
+					Name:            fmt.Sprintf("%s-downloader", pb.Name),
+					Image:           pb.Spec.Config.Download.Image,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         gitCloneCmd,
+					Env:             initEnv,
+					Resources:       resources,
+					SecurityContext: securityContext,
+					VolumeMounts:    initVolumeMounts,
+				}},
 					Containers: []corev1.Container{{
 						Name:       fmt.Sprintf("%s-builder", pb.Name),
 						Image:      pb.Spec.Config.Build.Image,
@@ -274,14 +344,7 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 							MountPath: volumeMountPath,
 						}},
 					}},
-					Volumes: []corev1.Volume{{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: pvcName,
-							},
-						},
-					}},
+					Volumes: volumes,
 				},
 			},
 		},
