@@ -223,7 +223,7 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	volumeName := jobVolumeName
 	volumeMountPath := jobVolumeMountPath
 	packagesPath := normalizePathString(pb.Spec.Source.Path)
-	var ttlSecondsAfterFinished int32 = 300
+	var ttlSecondsAfterFinished int32 = 1800
 	var backoffLimit int32 = 3
 
 	// Determine if we're using SSH (git@ URL) vs HTTPS
