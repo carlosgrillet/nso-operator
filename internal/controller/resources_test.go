@@ -101,7 +101,7 @@ var _ = Describe("Resource Creation Functions", func() {
 
 		Describe("newStatefulSet", func() {
 			It("should create a statefulset with correct specifications", func() {
-				// Create a separate NSO for this test
+
 				testNSO2 := &orchestrationciscocomv1alpha1.NSO{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-nso-statefulset",
@@ -422,7 +422,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				Expect(job.Namespace).To(Equal("default"))
 
 				// Check job specifications
-				Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(300)))
+				Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(1800)))
 				Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
 
 				// Check pod template
@@ -436,7 +436,7 @@ var _ = Describe("Resource Creation Functions", func() {
 				initContainer := initContainers[0]
 				Expect(initContainer.Name).To(Equal("test-pb-resources-downloader"))
 				Expect(initContainer.Image).To(Equal("alpine/git"))
-				Expect(initContainer.Command).To(Equal([]string{"git", "clone", "--depth", "1", "https://github.com/example/test-repo.git", "/repo"}))
+				Expect(initContainer.Command).To(Equal([]string{"git", "clone", "--depth", "1", "--branch", "main", "https://github.com/example/test-repo.git", "/repo"}))
 
 				// Check init container volume mounts
 				initVolumeMounts := initContainer.VolumeMounts
@@ -558,6 +558,339 @@ var _ = Describe("Resource Creation Functions", func() {
 			It("should handle just slashes", func() {
 				result := normalizePathString("///")
 				Expect(result).To(Equal(""))
+			})
+		})
+	})
+
+	Context("PackageBundle Job Creation with Git Features", func() {
+		var pbReconciler *PackageBundleReconciler
+		ctx := context.Background()
+
+		BeforeEach(func() {
+			pbReconciler = &PackageBundleReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+		})
+
+		Describe("newJob with Git Branch Support", func() {
+			It("should include branch in git clone command when branch is specified", func() {
+				testPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pb-branch",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url:    "https://github.com/example/packages.git",
+							Branch: "develop",
+							Path:   "packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "nso-builder:latest",
+							},
+						},
+					},
+				}
+
+				job := pbReconciler.newJob(ctx, testPB)
+
+				// Check that git clone command includes --branch flag
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+				Expect(initContainer.Command).To(ContainElement("--branch"))
+				Expect(initContainer.Command).To(ContainElement("develop"))
+
+				// Verify command structure: git clone --depth 1 --branch develop <url> <path>
+				cmdIndex := 0
+				for i, arg := range initContainer.Command {
+					if arg == "git" {
+						cmdIndex = i
+						break
+					}
+				}
+				Expect(initContainer.Command[cmdIndex]).To(Equal("git"))
+				Expect(initContainer.Command[cmdIndex+1]).To(Equal("clone"))
+				Expect(initContainer.Command).To(ContainElement("--depth"))
+				Expect(initContainer.Command).To(ContainElement("1"))
+			})
+
+			It("should not include branch flag when branch is empty", func() {
+				testPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pb-no-branch",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url:  "https://github.com/example/packages.git",
+							Path: "packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "nso-builder:latest",
+							},
+						},
+					},
+				}
+
+				job := pbReconciler.newJob(ctx, testPB)
+
+				// Check that git clone command does NOT include --branch flag
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+				Expect(initContainer.Command).NotTo(ContainElement("--branch"))
+			})
+		})
+
+		Describe("newJob with SSH Authentication", func() {
+			It("should mount SSH key and configure environment for git@ URLs", func() {
+				testPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pb-ssh",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Credentials: orchestrationciscocomv1alpha1.AccessCredentials{
+							SshKeySecretRef: "ssh-key-secret",
+						},
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url:  "git@github.com:example/packages.git",
+							Path: "packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "nso-builder:latest",
+							},
+						},
+					},
+				}
+
+				job := pbReconciler.newJob(ctx, testPB)
+
+				// Check SSH key volume is mounted
+				volumes := job.Spec.Template.Spec.Volumes
+				sshVolumeFound := false
+				for _, vol := range volumes {
+					if vol.Name == sshVolumeName {
+						sshVolumeFound = true
+						Expect(vol.Secret).NotTo(BeNil())
+						Expect(vol.Secret.SecretName).To(Equal("ssh-key-secret"))
+						break
+					}
+				}
+				Expect(sshVolumeFound).To(BeTrue(), "SSH key volume should be present")
+
+				// Check SSH key volume mount in init container
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+				sshMountFound := false
+				for _, mount := range initContainer.VolumeMounts {
+					if mount.Name == sshVolumeName {
+						sshMountFound = true
+						Expect(mount.MountPath).To(Equal("/.ssh"))
+						Expect(mount.ReadOnly).To(BeTrue())
+						break
+					}
+				}
+				Expect(sshMountFound).To(BeTrue(), "SSH key mount should be present in init container")
+
+				// Check environment variables for SSH
+				homeEnvFound := false
+				gitSSHEnvFound := false
+				for _, env := range initContainer.Env {
+					if env.Name == "HOME" {
+						homeEnvFound = true
+						Expect(env.Value).To(Equal("/tmp"))
+					}
+					if env.Name == "GIT_SSH_COMMAND" {
+						gitSSHEnvFound = true
+						Expect(env.Value).To(ContainSubstring("ssh -i /.ssh/id_rsa"))
+						Expect(env.Value).To(ContainSubstring("StrictHostKeyChecking=no"))
+					}
+				}
+				Expect(homeEnvFound).To(BeTrue(), "HOME environment variable should be set")
+				Expect(gitSSHEnvFound).To(BeTrue(), "GIT_SSH_COMMAND environment variable should be set")
+			})
+
+			It("should NOT mount SSH key for HTTPS URLs even if sshKeySecretRef is set", func() {
+				testPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pb-https-no-ssh",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Credentials: orchestrationciscocomv1alpha1.AccessCredentials{
+							SshKeySecretRef: "ssh-key-secret",
+						},
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url:  "https://github.com/example/packages.git",
+							Path: "packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "nso-builder:latest",
+							},
+						},
+					},
+				}
+
+				job := pbReconciler.newJob(ctx, testPB)
+
+				// Check SSH key volume is NOT mounted
+				volumes := job.Spec.Template.Spec.Volumes
+				for _, vol := range volumes {
+					Expect(vol.Name).NotTo(Equal(sshVolumeName), "SSH key volume should NOT be present for HTTPS URLs")
+				}
+
+				// Check init container has no SSH environment variables
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+				for _, env := range initContainer.Env {
+					Expect(env.Name).NotTo(Equal("GIT_SSH_COMMAND"), "GIT_SSH_COMMAND should NOT be set for HTTPS URLs")
+				}
+
+				// Check security context is standard (RunAsUser=1000)
+				Expect(initContainer.SecurityContext).NotTo(BeNil())
+				Expect(initContainer.SecurityContext.RunAsUser).NotTo(BeNil())
+				Expect(*initContainer.SecurityContext.RunAsUser).To(Equal(int64(1000)))
+			})
+
+			It("should use different security context for SSH vs HTTPS", func() {
+				// SSH URL test
+				sshPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-ssh", Namespace: "default"},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Credentials: orchestrationciscocomv1alpha1.AccessCredentials{
+							SshKeySecretRef: "ssh-key",
+						},
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url: "git@github.com:example/repo.git",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{Image: "alpine/git"},
+							Build:    orchestrationciscocomv1alpha1.ContainerParams{Image: "nso:latest"},
+						},
+					},
+				}
+
+				sshJob := pbReconciler.newJob(ctx, sshPB)
+				sshInitContainer := sshJob.Spec.Template.Spec.InitContainers[0]
+
+				// SSH should NOT have RunAsUser set (runs as default container user)
+				if sshInitContainer.SecurityContext != nil {
+					Expect(sshInitContainer.SecurityContext.RunAsUser).To(BeNil())
+				}
+
+				// HTTPS URL test
+				httpsPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-https", Namespace: "default"},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url: "https://github.com/example/repo.git",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{Image: "alpine/git"},
+							Build:    orchestrationciscocomv1alpha1.ContainerParams{Image: "nso:latest"},
+						},
+					},
+				}
+
+				httpsJob := pbReconciler.newJob(ctx, httpsPB)
+				httpsInitContainer := httpsJob.Spec.Template.Spec.InitContainers[0]
+
+				// HTTPS should have RunAsUser=1000
+				Expect(httpsInitContainer.SecurityContext).NotTo(BeNil())
+				Expect(httpsInitContainer.SecurityContext.RunAsUser).NotTo(BeNil())
+				Expect(*httpsInitContainer.SecurityContext.RunAsUser).To(Equal(int64(1000)))
+			})
+		})
+
+		Describe("newJob with combined SSH and Branch", func() {
+			It("should support both SSH authentication and branch selection", func() {
+				testPB := &orchestrationciscocomv1alpha1.PackageBundle{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pb-ssh-branch",
+						Namespace: "default",
+					},
+					Spec: orchestrationciscocomv1alpha1.PackageBundleSpec{
+						TargetName:  "test-nso",
+						StorageSize: "1Gi",
+						Origin:      orchestrationciscocomv1alpha1.OriginTypeSCM,
+						Credentials: orchestrationciscocomv1alpha1.AccessCredentials{
+							SshKeySecretRef: "ssh-key-secret",
+						},
+						Source: orchestrationciscocomv1alpha1.PackageSource{
+							Url:    "git@github.com:example/packages.git",
+							Branch: "feature/new-packages",
+							Path:   "packages",
+						},
+						Config: orchestrationciscocomv1alpha1.PackageConfig{
+							Download: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "alpine/git",
+							},
+							Build: orchestrationciscocomv1alpha1.ContainerParams{
+								Image: "nso-builder:latest",
+							},
+						},
+					},
+				}
+
+				job := pbReconciler.newJob(ctx, testPB)
+
+				// Check both SSH and branch are configured
+				initContainer := job.Spec.Template.Spec.InitContainers[0]
+
+				// Branch in command
+				Expect(initContainer.Command).To(ContainElement("--branch"))
+				Expect(initContainer.Command).To(ContainElement("feature/new-packages"))
+
+				// SSH environment variables
+				gitSSHEnvFound := false
+				for _, env := range initContainer.Env {
+					if env.Name == "GIT_SSH_COMMAND" {
+						gitSSHEnvFound = true
+						break
+					}
+				}
+				Expect(gitSSHEnvFound).To(BeTrue())
+
+				// SSH volume mount
+				sshMountFound := false
+				for _, mount := range initContainer.VolumeMounts {
+					if mount.Name == sshVolumeName && mount.MountPath == "/.ssh" {
+						sshMountFound = true
+						break
+					}
+				}
+				Expect(sshMountFound).To(BeTrue())
 			})
 		})
 	})

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -30,6 +31,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
+)
+
+const (
+	sshKeyFileMode  = int32(0400)
+	sshVolumeName   = "ssh-key"
+	sshKeyMountPath = "/.ssh"
 )
 
 func (r *NSOReconciler) newCDBPersistentVolumeClaim(ctx context.Context, nso *nsov1alpha1.NSO) *corev1.PersistentVolumeClaim {
@@ -216,8 +223,11 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 	volumeName := jobVolumeName
 	volumeMountPath := jobVolumeMountPath
 	packagesPath := normalizePathString(pb.Spec.Source.Path)
-	var ttlSecondsAfterFinished int32 = 300
+	var ttlSecondsAfterFinished int32 = 1800
 	var backoffLimit int32 = 3
+
+	// Determine if we're using SSH (git@ URL) vs HTTPS
+	isSSH := strings.HasPrefix(pb.Spec.Source.Url, "git@")
 
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
@@ -226,6 +236,15 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
+	}
+
+	if isSSH {
+		securityContext = &corev1.SecurityContext{
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		}
 	}
 
 	resources := corev1.ResourceRequirements{
@@ -239,6 +258,65 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 		},
 	}
 
+	gitCloneCmd := []string{"git", "clone", "--depth", "1"}
+	if pb.Spec.Source.Branch != "" {
+		gitCloneCmd = append(gitCloneCmd, "--branch", pb.Spec.Source.Branch)
+	}
+	gitCloneCmd = append(gitCloneCmd, pb.Spec.Source.Url, volumeMountPath)
+
+	initVolumeMounts := []corev1.VolumeMount{{
+		Name:      volumeName,
+		MountPath: volumeMountPath,
+	}}
+
+	volumes := []corev1.Volume{{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+			},
+		},
+	}}
+
+	var initEnv []corev1.EnvVar
+	var podSecurityContext *corev1.PodSecurityContext
+
+	// Only mount SSH key if using SSH protocol (git@)
+	if isSSH && pb.Spec.Credentials.SshKeySecretRef != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: sshVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  pb.Spec.Credentials.SshKeySecretRef,
+					DefaultMode: ptr.To(sshKeyFileMode),
+					Items: []corev1.KeyToPath{{
+						Key:  "id_rsa",
+						Path: "id_rsa",
+						Mode: ptr.To(sshKeyFileMode),
+					}},
+				},
+			},
+		})
+		initVolumeMounts = append(initVolumeMounts, corev1.VolumeMount{
+			Name:      sshVolumeName,
+			MountPath: sshKeyMountPath,
+			ReadOnly:  true,
+		})
+
+		initEnv = []corev1.EnvVar{
+			{
+				Name:  "HOME",
+				Value: "/tmp",
+			},
+			{
+				Name:  "GIT_SSH_COMMAND",
+				Value: fmt.Sprintf("ssh -i %s/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshKeyMountPath),
+			},
+		}
+
+		podSecurityContext = nil
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -249,18 +327,17 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 			BackoffLimit:            &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:   corev1.RestartPolicyNever,
+					SecurityContext: podSecurityContext,
 					InitContainers: []corev1.Container{{
 						Name:            fmt.Sprintf("%s-downloader", pb.Name),
 						Image:           pb.Spec.Config.Download.Image,
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"git", "clone", "--depth", "1", pb.Spec.Source.Url, volumeMountPath},
+						Command:         gitCloneCmd,
+						Env:             initEnv,
 						Resources:       resources,
 						SecurityContext: securityContext,
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      volumeName,
-							MountPath: volumeMountPath,
-						}},
+						VolumeMounts:    initVolumeMounts,
 					}},
 					Containers: []corev1.Container{{
 						Name:       fmt.Sprintf("%s-builder", pb.Name),
@@ -274,14 +351,7 @@ func (r *PackageBundleReconciler) newJob(ctx context.Context, pb *nsov1alpha1.Pa
 							MountPath: volumeMountPath,
 						}},
 					}},
-					Volumes: []corev1.Volume{{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: pvcName,
-							},
-						},
-					}},
+					Volumes: volumes,
 				},
 			},
 		},

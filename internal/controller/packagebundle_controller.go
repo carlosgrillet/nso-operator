@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	nsov1alpha1 "github.com/carlosgrillet/nso-operator/api/v1alpha1"
@@ -53,6 +54,9 @@ const (
 	downloadJobNameFmt   = "download-%s"
 	jobVolumeName        = "package-storage"
 	jobVolumeMountPath   = "/repo"
+
+	// Finalizer for cleanup
+	packageBundleFinalizer = "packagebundle.orchestration.cisco.com/finalizer"
 )
 
 // Sentinel errors for control flow
@@ -89,7 +93,6 @@ type PackageBundleReconciler struct {
 func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	// Fetch the PackageBundle instance
 	packageBundle := &nsov1alpha1.PackageBundle{}
 	err := r.Get(ctx, req.NamespacedName, packageBundle)
 	if err != nil {
@@ -101,7 +104,36 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// Set initial status if not set
+	if packageBundle.DeletionTimestamp != nil {
+		if controllerutil.ContainsFinalizer(packageBundle, packageBundleFinalizer) {
+
+			log.Info("PackageBundle is being deleted, cleaning up")
+
+			if err := r.unmountPVCFromNSO(ctx, packageBundle); err != nil {
+				log.Error(err, "Failed to unmount PVC during deletion")
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(packageBundle, packageBundleFinalizer)
+			if err := r.Update(ctx, packageBundle); err != nil {
+				log.Error(err, "Failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+			log.Info("Finalizer removed, PackageBundle can now be deleted")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(packageBundle, packageBundleFinalizer) {
+		controllerutil.AddFinalizer(packageBundle, packageBundleFinalizer)
+		if err := r.Update(ctx, packageBundle); err != nil {
+			log.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		log.Info("Finalizer added to PackageBundle")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	if packageBundle.Status.Phase == "" {
 		if err := updatePackageBundlePhase(ctx, r.Client, packageBundle, nsov1alpha1.PackageBundlePhasePending, "PackageBundle created", ""); err != nil {
 			log.Error(err, "Failed to set initial status")
@@ -114,7 +146,6 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	// If downloaded OR loading, proceed to mount the PVC and reload packages
 	if packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseDownloaded ||
 		packageBundle.Status.Phase == nsov1alpha1.PackageBundlePhaseLoading {
 		if err := r.mountPVCToNSO(ctx, packageBundle); err != nil {
@@ -123,7 +154,6 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				log.Info("NSO pod not ready, will retry", "error", err)
 				return ctrl.Result{RequeueAfter: requeueIntervalMountRetry}, nil
 			}
-			// Actual errors should be returned
 			log.Error(err, "Failed to mount PVC or reload packages in NSO instance")
 			return ctrl.Result{}, err
 		}
@@ -181,6 +211,77 @@ func (r *PackageBundleReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// If job succeeded, the phase will be Downloaded and on next reconcile the PVC will be mounted
 	return ctrl.Result{}, nil
+}
+
+func (r *PackageBundleReconciler) unmountPVCFromNSO(ctx context.Context, packageBundle *nsov1alpha1.PackageBundle) error {
+	log := logf.FromContext(ctx)
+
+	nso := &nsov1alpha1.NSO{}
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      packageBundle.Spec.TargetName,
+		Namespace: packageBundle.Namespace,
+	}, nso)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("NSO instance not found, nothing to unmount", "targetName", packageBundle.Spec.TargetName)
+			return nil
+		}
+		return err
+	}
+
+	volumeName := generatePackageVolumeName(packageBundle.Name)
+
+	volumeExists := false
+	for _, vol := range nso.Spec.Volumes {
+		if vol.Name == volumeName {
+			volumeExists = true
+			break
+		}
+	}
+
+	if !volumeExists {
+		log.Info("Volume not mounted, nothing to unmount", "volume", volumeName)
+		return nil
+	}
+
+	log.Info("Removing PVC volume from NSO instance", "nso", nso.Name, "volume", volumeName)
+
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latestNSO := &nsov1alpha1.NSO{}
+		if err := r.Get(ctx, client.ObjectKey{
+			Name:      packageBundle.Spec.TargetName,
+			Namespace: packageBundle.Namespace,
+		}, latestNSO); err != nil {
+			return err
+		}
+
+		newVolumes := []corev1.Volume{}
+		for _, vol := range latestNSO.Spec.Volumes {
+			if vol.Name != volumeName {
+				newVolumes = append(newVolumes, vol)
+			}
+		}
+		latestNSO.Spec.Volumes = newVolumes
+
+		newVolumeMounts := []corev1.VolumeMount{}
+		for _, vm := range latestNSO.Spec.VolumeMounts {
+			if vm.Name != volumeName {
+				newVolumeMounts = append(newVolumeMounts, vm)
+			}
+		}
+		latestNSO.Spec.VolumeMounts = newVolumeMounts
+
+		// Update the NSO instance
+		return r.Update(ctx, latestNSO)
+	})
+
+	if err != nil {
+		log.Error(err, "Failed to update NSO instance to remove PVC mount")
+		return err
+	}
+
+	log.Info("Successfully unmounted PVC from NSO instance", "nso", nso.Name)
+	return nil
 }
 
 // mountPVCToNSO mounts the PVC to the NSO instance specified in targetName
